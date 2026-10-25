@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.vs/
+.dotnet/
+qa/
+output/
+release/
+*.user
+*.suo
+test-evidence/
+docs/REVISION_REVIEW.md

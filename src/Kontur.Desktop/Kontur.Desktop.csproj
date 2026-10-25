@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <AssemblyName>ParamForge</AssemblyName>
+    <RootNamespace>Kontur.Desktop</RootNamespace>
+    <Version>2.1.1</Version>
+    <Description>Нативная учебная система технологической подготовки токарной обработки</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Kontur.Core/Kontur.Core.csproj" />
+  </ItemGroup>
+</Project>
