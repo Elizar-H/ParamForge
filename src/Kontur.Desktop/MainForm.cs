@@ -312,6 +312,7 @@ internal sealed class MainForm : Form
         var baseline = ReadParameters(false, false);
         if (baseline is null) return;
         previewTimer.Stop();
+        UpdatePreview();
         using var editor = new DimensionEditDialog(key, baseline, candidate => Engine.Generate(candidate));
         if (editor.ShowDialog(this) != DialogResult.OK || editor.Result is null) return;
         SetParameters(editor.Result.Params);

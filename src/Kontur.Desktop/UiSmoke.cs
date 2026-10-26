@@ -169,6 +169,36 @@ internal static class UiSmoke
             Check("canvas_edit_after_resize", form.GetInput("counterboreDiameter") == "76" && !form.IsStale);
             form.ClientSize = new Size(1280, 850); form.SetParameters(Engine.Defaults); form.GenerateNow();
 
+            // Regression: a real side TextChanged starts the debounce, then a
+            // dimension is opened and cancelled before that timer can tick.
+            foreach (var cancel in new[] { "Escape", "CancelButton" })
+            {
+                foreach (var (scenario, sideKey, value, drawingText, dimensionCount) in new[]
+                {
+                    ("valid", "length", "132", "132", 7),
+                    ("invalid", "bodyDiameter", "76", "", 0)
+                })
+                {
+                    form.SetParameters(Engine.Defaults); form.GenerateNow(); RenderDrawing(form);
+                    var previousProject = JsonSerializer.Serialize(form.CurrentProject!);
+                    var sideBox = Descendants(form).OfType<TextBox>().Single(box => box.Name == "parameter_" + sideKey);
+                    sideBox.Text = value; // Do not use SetInput: it eagerly updates the preview.
+                    EditByCanvasClick(form, "boreDiameter", editor =>
+                    {
+                        if (cancel == "Escape") PressDialogKey(editor, Keys.Escape);
+                        else editor.CancelEditorButton.PerformClick();
+                    }, refresh: false);
+                    form.CaptureForm(Path.Combine(folder, "13-pending-side-" + scenario + "-after-" + cancel + ".png"));
+                    Check("cancel_pending_side_" + scenario + "_" + cancel + "_updates_preview_without_applying_project",
+                        form.GetInput(sideKey) == value && form.IsStale && form.StatusText == "" &&
+                        JsonSerializer.Serialize(form.CurrentProject!) == previousProject &&
+                        form.DimensionText("length") == drawingText && form.DrawingDimensionCount == dimensionCount,
+                        new { sideKey, sideValue = form.GetInput(sideKey), form.IsStale, form.StatusText,
+                            drawnLength = form.DimensionText("length"), drawnDimensions = form.DrawingDimensionCount });
+                }
+            }
+            form.SetParameters(Engine.Defaults); form.GenerateNow();
+
             var json = Path.Combine(folder, "parameters.json");
             form.SaveToPath(json);
             var invalidJson = Path.Combine(folder, "invalid-import.json");
@@ -258,6 +288,12 @@ internal static class UiSmoke
     }
 
 
+    private static void RenderDrawing(MainForm form)
+    {
+        var drawing = form.DrawingControl;
+        using var bitmap = new Bitmap(drawing.Width, drawing.Height);
+        drawing.DrawToBitmap(bitmap, new Rectangle(Point.Empty, drawing.Size));
+    }
     private static bool SameOtherParameters(Parameters before, Parameters after, string edited)
     {
         var name = char.ToUpperInvariant(edited[0]) + edited[1..];
@@ -275,9 +311,9 @@ internal static class UiSmoke
     // Invoke the same control MouseClick handler used by WinForms, at an actual
     // rendered label coordinate. This is a synthetic control event, not a global
     // OS mouse click. Its owned modal and Enter/Esc handlers run normally.
-    private static void EditByCanvasClick(MainForm owner, string key, Action<DimensionEditDialog> edit)
+    private static void EditByCanvasClick(MainForm owner, string key, Action<DimensionEditDialog> edit, bool refresh = true)
     {
-        owner.Refresh(); Application.DoEvents();
+        if (refresh) { owner.Refresh(); Application.DoEvents(); }
         var bounds = owner.DimensionHitBounds(key);
         if (bounds.IsEmpty) throw new InvalidOperationException("Missing hit area: " + key);
         var point = Point.Round(new PointF(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2));
