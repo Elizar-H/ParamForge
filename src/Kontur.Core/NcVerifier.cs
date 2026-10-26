@@ -7,14 +7,14 @@ namespace Kontur.Core;
 /// <summary>Независимая статическая проверка подмножества AxiOMA Control, используемого генератором.</summary>
 public static class NcVerifier
 {
-    public const string Version = "2.2.0";
+    public const string Version = "2.3.0";
     public const int MaximumCharacters = 1_000_000;
     public const int MaximumLines = 25_000;
     public const int MaximumErrors = 100;
     private const double Epsilon = .000501;
     private static readonly int[] Preparation = [21, 18, 90, 97, 40, 49, 80, 54];
     private static readonly HashSet<double> AllowedG = [21, 18, 10, 90, 94, 95, 97, 40, 43, 49, 80, 54, 0, 1];
-    private static readonly HashSet<double> AllowedM = [3, 5, 6, 30, 66];
+    private static readonly HashSet<double> AllowedM = [3, 5, 6, 8, 9, 30, 66];
     private static readonly HashSet<char> AllowedWords = ['N', 'G', 'M', 'X', 'Z', 'F', 'S', 'T', 'D'];
     private static readonly Regex TokenPattern = new(@"([A-Z])([+-]?(?:\d+(?:\.\d*)?|\.\d+))", RegexOptions.CultureInvariant);
     private static bool Integer(double value) => double.IsFinite(value) && value == Math.Floor(value) && Math.Abs(value) <= 9_007_199_254_740_991d;
@@ -77,6 +77,8 @@ public static class NcVerifier
         var lastN = -1;
         double? tool = null, corrector = null, rpm = null, feed = null, xState = null, zState = null;
         var spindle = false;
+        var coolant = false;
+        var coolantOffExplicitly = false;
         var ended = false;
         var stoppedExplicitly = false;
         var afterToolChange = false;
@@ -155,6 +157,8 @@ public static class NcVerifier
             if (gs.Contains(94) && gs.Contains(95)) { Fail(label + "G94 и G95 конфликтуют в одном кадре."); invalid = true; }
             if (gs.Contains(43) && gs.Contains(49)) { Fail(label + "G43 и G49 конфликтуют в одном кадре."); invalid = true; }
             if (ms.Count > 1) { Fail(label + "в этом подмножестве в кадре допускается одна M-команда."); invalid = true; }
+            if ((ms.Contains(8) || ms.Contains(9)) && (gs.Count != 0 || ms.Count != 1 || words.Count != 1))
+            { Fail(label + "M8/M9 должны быть отдельным кадром без других команд и адресов."); invalid = true; }
             if (motions.Count != 0 && (toolChange || ms.Contains(30)))
             { Fail(label + "движение нельзя совмещать со сменой инструмента или завершением программы."); invalid = true; }
             if (invalid) continue;
@@ -183,6 +187,8 @@ public static class NcVerifier
             }
             if ((words.ContainsKey('T') || words.ContainsKey('D')) && !toolChange)
                 Fail(label + "T и D задаются в одном кадре с M6 или M66.");
+            if (ms.Contains(8)) { coolant = true; coolantOffExplicitly = false; }
+            if (ms.Contains(9)) { coolant = false; coolantOffExplicitly = true; }
             if (ms.Contains(5))
             {
                 if (feedMode != 94) Fail(label + "перед M5 требуется отменить G95 командой G94.");
@@ -192,6 +198,7 @@ public static class NcVerifier
             {
                 if (spindle || !stoppedExplicitly) Fail(label + "перед сменой инструмента требуется явный M5.");
                 if (feedMode != 94) Fail(label + "смена инструмента выполняется после G94.");
+                if (coolant || !coolantOffExplicitly) Fail(label + "перед сменой инструмента требуется явный M9.");
                 if (!words.TryGetValue('T', out var t) || (t != 1 && t != 2)) Fail(label + "M6/M66 требует T1 или T2 в том же кадре.");
                 if (!words.TryGetValue('D', out var d) || d != 1) Fail(label + "M6/M66 требует кромку D1 в том же кадре.");
                 tool = words.GetValueOrDefault('T'); corrector = words.GetValueOrDefault('D');
@@ -228,6 +235,7 @@ public static class NcVerifier
                 if (mode == "G1")
                 {
                     if (!spindle) Fail(label + "рабочее перемещение G1 требует M3.");
+                    if (!coolant) Fail(label + "рабочее перемещение G1 требует включённой СОЖ M8.");
                     if (feedMode != 95) Fail(label + "рабочее перемещение G1 требует оборотной подачи G95.");
                     if (!(rpm > 0) || !Integer(rpm.Value)) Fail(label + "G1 требует положительных целых оборотов S.");
                     if (!(feed > 0)) Fail(label + "G1 требует положительной подачи F.");
@@ -247,6 +255,7 @@ public static class NcVerifier
             {
                 if (spindle || !stoppedExplicitly) Fail(label + "перед M30 требуется явный M5 после последнего M3.");
                 if (feedMode != 94) Fail(label + "перед M30 требуется G94.");
+                if (coolant || !coolantOffExplicitly) Fail(label + "перед M30 требуется явный M9.");
                 ended = true;
             }
         }

@@ -126,6 +126,7 @@ internal sealed class DimensionEditDialog : Form
 
     private string ShortError(IReadOnlyList<ValidationError> errors, Parameters candidate)
     {
+        if (MainForm.ProfileError(errors) is { } profileError) return profileError;
         if (errors.Any(e => e.Message.Contains("3 мм", StringComparison.Ordinal))) return "Минимальная стенка — 3 мм.";
         if (errors.Any(e => e.Message.Contains("трёх знаков", StringComparison.Ordinal))) return "Не более 3 знаков после запятой.";
         if (errors.Any(e => e.Message.StartsWith("Верхнее отклонение", StringComparison.Ordinal))) return "Верхнее отклонение ниже нижнего.";

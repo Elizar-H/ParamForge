@@ -24,6 +24,9 @@ internal sealed class SketchCanvas : Control
     internal bool LabelsClearOfMaterial { get; private set; }
     internal bool BoreDimensionsClearOfMaterial { get; private set; }
     internal int DimensionCount => labels.Count;
+    internal float DrawingScale { get; private set; }
+    internal float CornerRadiusPixels { get; private set; }
+    internal int CornerArcCount { get; private set; }
     internal bool LabelsClearOfRearEdges { get; private set; }
     internal string DimensionText(string key) => texts.GetValueOrDefault(key, "");
     internal RectangleF DimensionHitBounds(string key) => hitAreas.GetValueOrDefault(key);
@@ -62,6 +65,7 @@ internal sealed class SketchCanvas : Control
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
         labels.Clear(); hitAreas.Clear(); labelMasks.Clear(); texts.Clear();
         RearWallsClosed = LabelsClearOfMaterial = BoreDimensionsClearOfMaterial = LabelsClearOfRearEdges = false;
+        DrawingScale = CornerRadiusPixels = 0; CornerArcCount = 0;
         var u = Math.Clamp(DeviceDpi / 96F, 1F, 2F) * SimulatedTextScale;
         using var font = new Font("Segoe UI", 13F * u, FontStyle.Regular, GraphicsUnit.Pixel);
         using var small = new Font("Segoe UI", 11F * u, FontStyle.Regular, GraphicsUnit.Pixel);
@@ -114,16 +118,42 @@ internal sealed class SketchCanvas : Control
             new(xh, cy - rc), new(xh, cy - ri)
         ];
         var lower = upper.Select(point => new PointF(point.X, 2 * cy - point.Y)).ToArray();
+        DrawingScale = scale;
+        var radius = (float)ToolingProfile.CornerRadius * scale;
+        CornerRadiusPixels = radius >= 1 ? radius : 0;
+        using var upperPath = new GraphicsPath();
+        if (CornerRadiusPixels == 0) upperPath.AddPolygon(upper);
+        else
+        {
+            // Concave roots left by the insert nose; radius is drawn at the
+            // nominal scale, never magnified to make it look more prominent.
+            upperPath.StartFigure();
+            upperPath.AddLine(left, cy - ri, left, cy - rb);
+            upperPath.AddLine(left, cy - rb, xb - radius, cy - rb);
+            upperPath.AddArc(xb - 2 * radius, cy - rb - 2 * radius, 2 * radius, 2 * radius, 90, -90);
+            upperPath.AddLine(xb, cy - rb - radius, xb, cy - rd);
+            upperPath.AddLine(xb, cy - rd, right, cy - rd);
+            upperPath.AddLine(right, cy - rd, right, cy - rc);
+            upperPath.AddLine(right, cy - rc, xh + radius, cy - rc);
+            upperPath.AddArc(xh, cy - rc, 2 * radius, 2 * radius, 270, -90);
+            upperPath.AddLine(xh, cy - rc + radius, xh, cy - ri);
+            upperPath.AddLine(xh, cy - ri, left, cy - ri);
+            upperPath.CloseFigure();
+        }
+        using var lowerPath = (GraphicsPath)upperPath.Clone();
+        using var reflection = new Matrix(1, 0, 0, -1, 0, 2 * cy);
+        lowerPath.Transform(reflection);
+        CornerArcCount = upperPath.PathTypes.Count(type => (type & (byte)PathPointType.PathTypeMask) == (byte)PathPointType.Bezier3) / 3 * 2;
         using var hatch = new HatchBrush(HatchStyle.BackwardDiagonal, Color.FromArgb(167, 172, 177), Color.FromArgb(249, 250, 251));
         using var outline = new Pen(Theme.Ink, 1.7F * u);
-        g.FillPolygon(hatch, upper); g.FillPolygon(hatch, lower);
-        g.DrawPolygon(outline, upper); g.DrawPolygon(outline, lower);
+        g.FillPath(hatch, upperPath); g.FillPath(hatch, lowerPath);
+        g.DrawPath(outline, upperPath); g.DrawPath(outline, lowerPath);
         using var center = new Pen(Color.FromArgb(124, 131, 139), .7F * u) { DashStyle = DashStyle.DashDot };
         g.DrawLine(center, left - 20 * u, cy, right + 20 * u, cy);
         // A full longitudinal cut also shows the rear semicircular edges projected
         // onto the cutting plane. The space between these edges remains a hole.
         g.DrawLine(outline, left, cy - ri, left, cy + ri);
-        g.DrawLine(outline, xh, cy - ri, xh, cy + ri);
+        g.DrawLine(outline, xh, cy - rc, xh, cy + rc);
         g.DrawLine(outline, right, cy - rc, right, cy + rc);
         RearWallsClosed = left < xh && xh < right && rb > ri && rd > rc;
 
@@ -180,7 +210,7 @@ internal sealed class SketchCanvas : Control
         g.DrawLine(thin, right + 4 * u, cy + rd, outerX + 5 * u, cy + rd);
         Vertical(g, thin, arrows, cap, outerX, cy - rd, cy + rd, u);
         Label(g, "flangeDiameter", "⌀" + F(p.FlangeDiameter), outerX - 14 * u, cy, font, ink, u, true);
-        using var materialPath = new GraphicsPath(); materialPath.AddPolygon(upper); materialPath.AddPolygon(lower);
+        using var materialPath = new GraphicsPath(); materialPath.AddPath(upperPath, false); materialPath.AddPath(lowerPath, false);
         using var materialRegion = new Region(materialPath);
         LabelsClearOfMaterial = labels.Values.All(rect => !materialRegion.IsVisible(rect));
         BoreDimensionsClearOfMaterial = boreRoutes.All(route => RouteClear(upper, lower, route));

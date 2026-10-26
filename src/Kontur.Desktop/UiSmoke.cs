@@ -27,15 +27,18 @@ internal static class UiSmoke
             Check("default_generation", form.CurrentProject?.Verification.Ok == true && !form.IsStale);
             form.CaptureForm(Path.Combine(folder, "01-default-1280x850.png"));
             CheckCaptions(form, "default", Check);
+            Check("default_profile_stock_lengths", form.CurrentProject!.Calculations.StockLength == 155.5 && form.CurrentProject.Calculations.RawStockLength == 157.5 && form.CurrentProject.Calculations.CutLength == 117.5, form.CurrentProject.Calculations);
+            Check("default_radius_04_to_scale", form.DrawingDimensionCount == 7 && form.DrawingCornerArcCount == 4 && Math.Abs(form.DrawingCornerRadiusPixels - ToolingProfile.CornerRadius * form.DrawingScale) < .0001,
+                new { form.DrawingCornerRadiusPixels, form.DrawingScale, form.DrawingCornerArcCount });
             Check("default_labels_and_closed_walls", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreDimensionsClearOfMaterial && form.DrawingLabelsClearOfRearEdges);
 
-            form.SetInput("length", "132");
+            form.SetInput("length", "118");
             Check("change_marks_stale", form.IsStale);
             var staleBlocked = false;
             try { form.ExportToNewSubfolder(Path.Combine(folder, "stale-must-not-export")); }
             catch (InvalidOperationException) { staleBlocked = true; }
             Check("stale_export_blocked", staleBlocked && !Directory.Exists(Path.Combine(folder, "stale-must-not-export")));
-            Check("changed_length_recalculates", form.GenerateNow() && form.CurrentProject!.Params.Length == 132 && form.CurrentProject.Calculations.TargetLength == 131.5);
+            Check("changed_length_recalculates", form.GenerateNow() && form.CurrentProject!.Params.Length == 118 && form.CurrentProject.Calculations.TargetLength == 117.5);
             form.SetInput("length", "ошибка");
             Check("invalid_input_rejected", !form.GenerateNow() && form.IsStale && form.StatusText == "Введите число.");
             form.CaptureForm(Path.Combine(folder, "02-invalid-input.png"));
@@ -48,6 +51,27 @@ internal static class UiSmoke
             try { form.ExportToNewSubfolder(rejectedFolder); }
             catch (InvalidOperationException) { geometryBlocked = true; }
             Check("invalid_geometry_export_blocked", geometryBlocked && !Directory.Exists(rejectedFolder));
+            foreach (var (name, unsupported, message) in new[]
+            {
+                ("length160", Engine.Defaults with { Length = 160 }, "Вылет оправки: обработка до 120 мм."),
+                ("length250", Engine.Defaults with { Length = 250 }, "Вылет оправки: обработка до 120 мм."),
+                ("stock_bore18", Engine.Defaults with { StockBore = 18 }, "Для оправки нужно отверстие от 40 мм."),
+                ("holder_clearance", Engine.Defaults with { ClearanceX = 3 }, "Отвод оправки: диаметр от 40 мм."),
+                ("grip15", Engine.Defaults with { GripLength = 15 }, "Зажим должен быть не короче 25 мм."),
+                ("chuck_clearance5", Engine.Defaults with { ChuckClearance = 5 }, "Зазор до кулачков: 10…40 мм."),
+                ("corner_flat", Engine.Defaults with { BodyDiameter = 118.2 }, "Недостаточно места для сопряжения."),
+                ("second_setup_length20", Engine.Defaults with { Length = 20, FlangeDiameter = 200, BodyDiameter = 180, FlangeWidth = 2, BoreDiameter = 130, CounterboreDiameter = 150, CounterboreDepth = 1, StockDiameter = 204, StockBore = 128 }, "Мало длины для второго установа.")
+            })
+            {
+                form.SetParameters(unsupported);
+                Check("tool_profile_" + name + "_rejected_clearly", !form.GenerateNow() && form.IsStale && form.StatusText == message, form.StatusText);
+                var blockedPath = Path.Combine(folder, "unsupported-" + name + "-must-not-export");
+                var blocked = false;
+                try { form.ExportToNewSubfolder(blockedPath); }
+                catch (InvalidOperationException) { blocked = true; }
+                Check("tool_profile_" + name + "_export_blocked", blocked && !Directory.Exists(blockedPath));
+                if (name is "length160" or "stock_bore18" or "second_setup_length20") form.CaptureForm(Path.Combine(folder, "14-unsupported-" + name + ".png"));
+            }
             form.SetParameters(Engine.Defaults);
             form.SetInput("length", "-1");
             Check("negative_length_rejected", !form.GenerateNow() && form.IsStale && form.StatusText == "Длина L: 20…250 мм.");
@@ -61,7 +85,7 @@ internal static class UiSmoke
             Check("excess_precision_has_clear_error", !form.GenerateNow() && form.IsStale && form.StatusText == "Не более 3 знаков после запятой.");
 
             var shortProfile = Engine.Defaults with { Length = 80, FlangeWidth = 8, CounterboreDepth = 10, BodyDiameter = 84, FlangeDiameter = 100, StockDiameter = 104 };
-            var longProfile = Engine.Defaults with { Length = 160, FlangeWidth = 20, CounterboreDepth = 60, BodyDiameter = 110, FlangeDiameter = 140, StockDiameter = 144, BoreDiameter = 50, CounterboreDiameter = 80 };
+            var longProfile = Engine.Defaults with { Length = 118, FlangeWidth = 20, CounterboreDepth = 60, BodyDiameter = 110, FlangeDiameter = 140, StockDiameter = 144, BoreDiameter = 50, CounterboreDiameter = 80 };
             foreach (var (name, profile) in new[] { ("03-short", shortProfile), ("04-long", longProfile) })
             {
                 form.SetParameters(profile);
@@ -69,8 +93,8 @@ internal static class UiSmoke
                 form.CaptureForm(Path.Combine(folder, name + "-1280x850.png"));
                 Check(name + "_drawing", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreDimensionsClearOfMaterial && form.DrawingLabelsClearOfRearEdges);
             }
-            var thinProfile = Engine.Defaults with { Length = 250, FlangeDiameter = 35, BodyDiameter = 30, FlangeWidth = 2, BoreDiameter = 20, CounterboreDiameter = 22, CounterboreDepth = 1, StockDiameter = 36, StockBore = 18 };
-            var wideProfile = Engine.Defaults with { Length = 20, FlangeDiameter = 200, BodyDiameter = 180, FlangeWidth = 2, BoreDiameter = 130, CounterboreDiameter = 150, CounterboreDepth = 1, StockDiameter = 204, StockBore = 128 };
+            var thinProfile = Engine.Defaults with { Length = 118, FlangeDiameter = 60, BodyDiameter = 55, FlangeWidth = 2, BoreDiameter = 47.3, CounterboreDiameter = 50.5, CounterboreDepth = 1, StockDiameter = 64, StockBore = 45 };
+            var wideProfile = Engine.Defaults with { Length = 60, FlangeDiameter = 200, BodyDiameter = 180, FlangeWidth = 2, BoreDiameter = 130, CounterboreDiameter = 150, CounterboreDepth = 1, StockDiameter = 204, StockBore = 128 };
             foreach (var (name, profile) in new[] { ("09-extreme-thin", thinProfile), ("10-extreme-wide", wideProfile) })
             {
                 form.SetParameters(profile);
@@ -83,7 +107,7 @@ internal static class UiSmoke
                     new { labelsInside = form.DrawingLabelsInside, labelsOverlap = form.DrawingLabelsOverlap, rearWallsClosed = form.RearWallsClosed, labelsClearOfMaterial = form.DrawingLabelsClearOfMaterial, boreDimensionsClearOfMaterial = form.DrawingBoreDimensionsClearOfMaterial, rearEdgesClear = form.DrawingLabelsClearOfRearEdges });
                 form.ClientSize = new Size(1280, 850);
             }
-            foreach (var length in new[] { 80D, 116D, 160D })
+            foreach (var length in new[] { 80D, 116D, 118D })
                 foreach (var depth in new[] { 10D, 28D, 60D })
                 {
                     form.SetParameters(Engine.Defaults with { Length = length, CounterboreDepth = depth });
@@ -97,12 +121,16 @@ internal static class UiSmoke
             form.Size = new Size(1100, 720);
             form.CaptureForm(Path.Combine(folder, "05-minimum-1100x720.png"));
             CheckCaptions(form, "minimum", Check);
+            Check("minimum_radius_not_enlarged", form.DrawingDimensionCount == 7 && (ToolingProfile.CornerRadius * form.DrawingScale < 1
+                ? form.DrawingCornerArcCount == 0 && form.DrawingCornerRadiusPixels == 0
+                : form.DrawingCornerArcCount == 4 && Math.Abs(form.DrawingCornerRadiusPixels - ToolingProfile.CornerRadius * form.DrawingScale) < .0001),
+                new { form.DrawingCornerRadiusPixels, form.DrawingScale, form.DrawingCornerArcCount });
             Check("minimum_drawing", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreDimensionsClearOfMaterial && form.DrawingLabelsClearOfRearEdges, new { form.Width, form.Height });
             form.ClientSize = new Size(1280, 850);
 
 
             // Exercise the canvas MouseClick event path at rendered hit coordinates and its real owned modal editor.
-            var edits = new[] { ("length", 132D), ("flangeDiameter", 122D), ("bodyDiameter", 98D),
+            var edits = new[] { ("length", 118D), ("flangeDiameter", 122D), ("bodyDiameter", 98D),
                 ("flangeWidth", 14D), ("boreDiameter", 48D), ("counterboreDiameter", 76D), ("counterboreDepth", 32D) };
             foreach (var (key, nominal) in edits)
             {
@@ -164,6 +192,13 @@ internal static class UiSmoke
                 Check("canvas_reversed_tolerance_rejected", editor.Visible && editor.Result is null && editor.ErrorText == "Верхнее отклонение ниже нижнего.");
                 PressDialogKey(editor, Keys.Escape);
             });
+            EditByCanvasClick(form, "length", editor =>
+            {
+                editor.NominalInput.Text = "160"; editor.ApplyButton.PerformClick();
+                Check("canvas_overhang_limit_has_tool_message", editor.Visible && editor.Result is null && editor.ErrorText == "Вылет оправки: обработка до 120 мм.");
+                CaptureDialog(editor, Path.Combine(folder, "15-editor-tool-limit.png"));
+                PressDialogKey(editor, Keys.Escape);
+            });
             form.Size = new Size(1100, 720); form.Refresh(); Application.DoEvents();
             EditByCanvasClick(form, "counterboreDiameter", editor =>
             {
@@ -178,7 +213,7 @@ internal static class UiSmoke
             {
                 foreach (var (scenario, sideKey, value, drawingText, dimensionCount) in new[]
                 {
-                    ("valid", "length", "132", "132", 7),
+                    ("valid", "length", "118", "118", 7),
                     ("invalid", "bodyDiameter", "76", "", 0)
                 })
                 {
@@ -210,7 +245,7 @@ internal static class UiSmoke
             try { form.ImportFromPath(invalidJson); }
             catch (InvalidDataException) { invalidImport = true; }
             Check("invalid_import_preserves_form", invalidImport && form.GetInput("length") == MainForm.F(Engine.Defaults.Length) && !form.IsStale);
-            form.SetInput("length", "132");
+            form.SetInput("length", "118");
             form.ImportFromPath(json);
             Check("valid_import", !form.IsStale && form.CurrentProject!.Params.Length == 116);
 
@@ -225,6 +260,9 @@ internal static class UiSmoke
             var originalPartName = form.CurrentProject!.Params.PartName;
             var processingTitle = CancelOwnModal(form, () => InvokeAction(form, "OpenProcessing"), dialog =>
             {
+                Check("stock_profile_fields_only_in_processing", form.MainNumericInputCount == 17 &&
+                    Descendants(dialog).OfType<Label>().Any(label => label.Text == "Зазор до кулачков, мм") &&
+                    Descendants(dialog).OfType<Label>().Any(label => label.Text == "Припуск переднего торца, мм"));
                 var pair = Descendants(dialog).OfType<Button>().ToArray();
                 CheckButtonPair("processing", pair.Single(button => button.Text == "Применить"), pair.Single(button => button.Text == "Отмена"), Check);
                 var partName = Descendants(dialog).OfType<TextBox>().First(box => box.Text == originalPartName);
@@ -245,7 +283,7 @@ internal static class UiSmoke
             var firstExport = FileSnapshot(Path.GetDirectoryName(files[0])!);
             var fileAtNextName = Path.Combine(exportParent, "Документы втулки (3)");
             File.WriteAllText(fileAtNextName, "preserve occupied folder name");
-            form.SetInput("length", "132");
+            form.SetInput("length", "118");
             Check("repeat_export_recalculates_new_geometry", form.GenerateNow());
             var repeated = form.ExportToNewSubfolder(exportParent);
             Check("repeat_export_keeps_previous_bundle_and_skips_file_name",
@@ -253,7 +291,7 @@ internal static class UiSmoke
                 Path.GetFileName(Path.GetDirectoryName(repeated[0])) == "Документы втулки (4)" &&
                 firstExport == FileSnapshot(Path.GetDirectoryName(files[0])!) &&
                 File.ReadAllText(fileAtNextName) == "preserve occupied folder name" &&
-                File.ReadAllText(repeated[2]).Contains("L 131.5", StringComparison.Ordinal), repeated);
+                File.ReadAllText(repeated[2]).Contains("L 117.5", StringComparison.Ordinal), repeated);
             form.SetParameters(Engine.Defaults);
             form.GenerateNow();
             form.CaptureProcessingDialog(Path.Combine(folder, "07-processing-dialog.png"));
@@ -356,19 +394,31 @@ internal static class UiSmoke
         if (bounds.IsEmpty) throw new InvalidOperationException("Missing hit area: " + key);
         var point = Point.Round(new PointF(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2));
         var edited = false;
+        Exception? editFailure = null;
         using var watchdog = new System.Threading.Timer(_ => Environment.Exit(4), null, 10_000, Timeout.Infinite);
         using var timer = new System.Windows.Forms.Timer { Interval = 100 };
         timer.Tick += (_, _) =>
         {
             var editor = Application.OpenForms.OfType<DimensionEditDialog>().FirstOrDefault(dialog => dialog.Owner == owner);
             if (editor is null) return;
-            timer.Stop(); edited = true; edit(editor);
+            timer.Stop(); edited = true;
+            try { edit(editor); }
+            catch (Exception ex) { editFailure = ex; }
+            finally
+            {
+                if (editor.DialogResult == DialogResult.None)
+                {
+                    editFailure ??= new InvalidOperationException("Editor did not finish: " + key + ": " + editor.ErrorText);
+                    editor.CancelEditorButton.PerformClick();
+                }
+            }
         };
         timer.Start();
         typeof(Control).GetMethod("OnMouseClick", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(owner.DrawingControl, [new MouseEventArgs(MouseButtons.Left, 1, point.X, point.Y, 0)]);
         timer.Stop();
         if (!edited) throw new InvalidOperationException("Canvas click did not open editor: " + key);
+        if (editFailure is not null) throw editFailure;
     }
 
     private static IEnumerable<Control> Descendants(Control root)

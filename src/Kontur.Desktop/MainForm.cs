@@ -30,6 +30,9 @@ internal sealed class MainForm : Form
     internal bool DrawingBoreDimensionsClearOfMaterial => sketch.BoreDimensionsClearOfMaterial;
     internal int DrawingDpi => sketch.DeviceDpi;
     internal int DrawingDimensionCount => sketch.DimensionCount;
+    internal float DrawingScale => sketch.DrawingScale;
+    internal float DrawingCornerRadiusPixels => sketch.CornerRadiusPixels;
+    internal int DrawingCornerArcCount => sketch.CornerArcCount;
     internal bool DrawingLabelsClearOfRearEdges => sketch.LabelsClearOfRearEdges;
     internal string DimensionText(string key) => sketch.DimensionText(key);
 
@@ -279,6 +282,7 @@ internal sealed class MainForm : Form
 
     private string ShortError(IReadOnlyList<ValidationError> invalid)
     {
+        if (ProfileError(invalid) is { } profileError) return profileError;
         if (invalid.Any(e => e.Message.Contains("3 мм", StringComparison.Ordinal))) return "Минимальная стенка — 3 мм.";
         if (invalid.Any(e => e.Message.Contains("трёх знаков", StringComparison.Ordinal))) return "Не более 3 знаков после запятой.";
         if (invalid.Any(e => e.Message.StartsWith("Верхнее отклонение", StringComparison.Ordinal))) return "Верхнее отклонение ниже нижнего.";
@@ -299,6 +303,30 @@ internal sealed class MainForm : Form
                 if (error.Message.Length <= 38) return error.Message;
             }
         return invalid.Any(e => inputs.ContainsKey(e.Field)) ? "Проверьте связь размеров." : "Проверьте параметры обработки.";
+    }
+
+    internal static string? ProfileError(IReadOnlyList<ValidationError> errors)
+    {
+        if (errors.Any(e => e.Field == "length" && e.Message.StartsWith("Недостаточно длины для второго установа", StringComparison.Ordinal)))
+            return "Мало длины для второго установа.";
+        if (errors.Any(e => e.Field == "stockBore" && e.Message.Contains("оправки", StringComparison.Ordinal)))
+            return $"Для оправки нужно отверстие от {F(ToolingProfile.BoringMinimumDiameter)} мм.";
+        if (errors.Any(e => e.Field == "clearanceX" && e.Message.Contains("оправки", StringComparison.Ordinal)))
+            return $"Отвод оправки: диаметр от {F(ToolingProfile.BoringMinimumDiameter)} мм.";
+        if (errors.Any(e => e.Field == "length" && e.Message.StartsWith("Длина обработки превышает", StringComparison.Ordinal)))
+            return $"Вылет оправки: обработка до {F(ToolingProfile.MaximumBoringDepth)} мм.";
+        if (errors.Any(e => e.Field == "gripLength" && e.Message.StartsWith("Длина зажима", StringComparison.Ordinal)))
+            return $"Зажим должен быть не короче {F(ToolingProfile.ChuckMinimumGrip)} мм.";
+        if (errors.Any(e => e.Field == "chuckClearance" && e.Message.Contains("диапазон", StringComparison.Ordinal)))
+        {
+            var field = Engine.Fields.Single(f => f.Key == "chuckClearance");
+            return $"Зазор до кулачков: {F(field.Min)}…{F(field.Max)} мм.";
+        }
+        if (errors.Any(e => e.Field == "chuckClearance" && e.Message.StartsWith("Осевой зазор", StringComparison.Ordinal)))
+            return $"Зазор до кулачков — от {F(ToolingProfile.ChuckMinimumClearance)} мм.";
+        if (errors.Any(e => e.Message.Contains("галтел", StringComparison.OrdinalIgnoreCase)))
+            return "Недостаточно места для сопряжения.";
+        return null;
     }
 
     private void OpenProcessing()
@@ -533,7 +561,7 @@ internal sealed class MainForm : Form
             if (invalid.Count > 0)
             {
                 foreach (var error in invalid) if (boxes.TryGetValue(error.Field, out var box)) errors.SetError(box, error.Message);
-                MessageBox.Show(this, invalid[0].Message, "Проверьте параметры", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, ProfileError(invalid) ?? invalid[0].Message, "Проверьте параметры", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             Result = value;

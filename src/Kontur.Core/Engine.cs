@@ -9,7 +9,7 @@ namespace Kontur.Core;
 /// <summary>Детерминированный расчёт обработки и согласованные карты/УП.</summary>
 public static class Engine
 {
-    public const string Version = "2.2.0";
+    public const string Version = "2.3.0";
     public static Parameters Defaults => new();
     public static IReadOnlyList<FieldDefinition> Fields { get; } = Array.AsReadOnly(new[]
     {
@@ -23,7 +23,9 @@ public static class Engine
         new("stockDiameter", "Наружный диаметр заготовки", "мм", "Заготовка", 32, 240, .1, "Наружный диаметр заготовки до точения"),
         new("stockBore", "Исходное отверстие заготовки", "мм", "Заготовка", 16, 155, .1, "Диаметр сквозного отверстия до растачивания"),
         new("trimAllowance", "Припуск заднего торца", "мм", "Заготовка", .5, 5, .1, "Припуск, снимаемый с заднего торца в операции 020"),
-        new("gripLength", "Длина хвостовика под зажим", "мм", "Заготовка", 15, 80, 1, "Дополнительная длина заготовки для закрепления"),
+        new("gripLength", "Длина зажима", "мм", "Заготовка", ToolingProfile.ChuckMinimumGrip, 80, 1, "Фактическая длина заготовки, охваченная кулачками"),
+        new("chuckClearance", "Зазор до кулачков", "мм", "Заготовка", ToolingProfile.ChuckMinimumClearance, 40, .1, "От задней границы отрезного реза до кулачков: габарит проектного блока 6 мм и остаточный запас не менее 4 мм"),
+        new("frontFacingAllowance", "Припуск переднего торца", "мм", "Заготовка", .5, 5, .1, "Осевой припуск, снимаемый в операции 005 до задания Z0"),
         new("depthOutside", "Глубина наружного прохода ap", "мм", "Режимы", .1, 5, .1, "Максимальная радиальная глубина одного наружного прохода"),
         new("depthInside", "Глубина внутреннего прохода ap", "мм", "Режимы", .1, 3, .1, "Максимальная радиальная глубина одного внутреннего прохода"),
         new("finishAllowance", "Чистовой припуск a", "мм", "Режимы", .05, .5, .05, "Радиальный припуск, оставляемый перед чистовым проходом"),
@@ -51,7 +53,8 @@ public static class Engine
         "length" => p.Length, "flangeDiameter" => p.FlangeDiameter, "bodyDiameter" => p.BodyDiameter,
         "flangeWidth" => p.FlangeWidth, "boreDiameter" => p.BoreDiameter, "counterboreDiameter" => p.CounterboreDiameter,
         "counterboreDepth" => p.CounterboreDepth, "stockDiameter" => p.StockDiameter, "stockBore" => p.StockBore,
-        "trimAllowance" => p.TrimAllowance, "gripLength" => p.GripLength, "depthOutside" => p.DepthOutside,
+        "trimAllowance" => p.TrimAllowance, "gripLength" => p.GripLength, "chuckClearance" => p.ChuckClearance,
+        "frontFacingAllowance" => p.FrontFacingAllowance, "depthOutside" => p.DepthOutside,
         "depthInside" => p.DepthInside, "finishAllowance" => p.FinishAllowance, "cuttingSpeed" => p.CuttingSpeed,
         "feedRough" => p.FeedRough, "feedFinish" => p.FeedFinish, "rpmMax" => p.RpmMax,
         "clearanceX" => p.ClearanceX, "clearanceZ" => p.ClearanceZ,
@@ -74,12 +77,20 @@ public static class Engine
     {
         var length = Target(p.Length, p.LengthLowerDeviation, p.LengthUpperDeviation);
         var cut = Round(length + p.TrimAllowance);
-        return new(Round(cut + p.GripLength), cut, Round(p.StockDiameter + 2 * p.ClearanceX),
+        var stock = Round(cut + ToolingProfile.CutoffWidth + p.ChuckClearance + p.GripLength);
+        var widthTolerance = ToolingProfile.GeneralLinearTolerance(p.FlangeWidth);
+        var secondClampStart = Round(p.FlangeWidth + widthTolerance + ToolingProfile.SoftJawBeltStartClearance);
+        return new(stock, cut, Round(p.StockDiameter + 2 * p.ClearanceX),
             Round(p.StockBore - 2 * p.ClearanceX), time,
             Target(p.BoreDiameter, p.BoreLowerDeviation, p.BoreUpperDeviation),
             Target(p.CounterboreDiameter, p.CounterboreLowerDeviation, p.CounterboreUpperDeviation),
             Target(p.FlangeDiameter, p.FlangeLowerDeviation, p.FlangeUpperDeviation), length,
-            Target(p.CounterboreDepth, p.CounterboreDepthLowerDeviation, p.CounterboreDepthUpperDeviation));
+            Target(p.CounterboreDepth, p.CounterboreDepthLowerDeviation, p.CounterboreDepthUpperDeviation),
+            ToolingProfile.CutoffWidth, -cut, -Round(cut + ToolingProfile.CutoffWidth),
+            -Round(cut + ToolingProfile.CutoffWidth + p.ChuckClearance), Round(stock + p.FrontFacingAllowance),
+            secondClampStart, Round(secondClampStart + ToolingProfile.SecondSetupGripLength),
+            Round(p.FlangeDiameter + p.FlangeUpperDeviation + ToolingProfile.SoftJawPocketDiametralClearance),
+            Round(p.FlangeWidth + widthTolerance + ToolingProfile.SoftJawPocketAxialClearance));
     }
 
     public static List<ValidationError> Validate(Parameters p)
@@ -131,14 +142,20 @@ public static class Engine
         var cbMax = p.CounterboreDiameter + p.CounterboreUpperDeviation;
         var lengthMin = p.Length + p.LengthLowerDeviation;
         var depthMax = p.CounterboreDepth + p.CounterboreDepthUpperDeviation;
+        var bodyTolerance = ToolingProfile.GeneralLinearTolerance(p.BodyDiameter);
+        var widthTolerance = ToolingProfile.GeneralLinearTolerance(p.FlangeWidth);
+        var bodyMin = p.BodyDiameter - bodyTolerance;
+        var bodyMax = p.BodyDiameter + bodyTolerance;
+        var widthMin = p.FlangeWidth - widthTolerance;
+        var widthMax = p.FlangeWidth + widthTolerance;
         if (p.RpmMax != Math.Floor(p.RpmMax)) Error("rpmMax", "Ограничение оборотов задаётся целым числом.");
-        if (p.FlangeWidth >= lengthMin) Error("flangeWidth", "Ширина буртика должна быть меньше минимальной длины по допуску.");
+        if (widthMax >= lengthMin) Error("flangeWidth", "Максимальная ширина буртика должна быть меньше минимальной длины по допускам.");
         if (depthMax >= lengthMin) Error("counterboreDepth", "Максимальная глубина расточки должна быть меньше минимальной длины по допуску.");
-        if (p.BodyDiameter >= flangeMin) Error("bodyDiameter", "Диаметр тела должен быть меньше минимального диаметра буртика по допуску.");
+        if (bodyMax >= flangeMin) Error("bodyDiameter", "Максимальный диаметр тела должен быть меньше минимального диаметра буртика по допускам.");
         if (boreMax >= cbMin) Error("counterboreDiameter", "Минимальная расточка должна быть шире максимального основного отверстия.");
-        if ((p.BodyDiameter - boreMax) / 2 < 3 - 1e-8) Error("boreDiameter", "Толщина стенки тела по худшему сочетанию допусков должна быть не менее 3 мм.");
+        if ((bodyMin - boreMax) / 2 < 3 - 1e-8) Error("boreDiameter", "Толщина стенки тела по худшему сочетанию допусков должна быть не менее 3 мм.");
         if ((flangeMin - cbMax) / 2 < 3 - 1e-8) Error("counterboreDiameter", "Толщина стенки буртика по худшему сочетанию допусков должна быть не менее 3 мм.");
-        if (depthMax > p.FlangeWidth && (p.BodyDiameter - cbMax) / 2 < 3 - 1e-8)
+        if (depthMax > widthMin && (bodyMin - cbMax) / 2 < 3 - 1e-8)
             Error("counterboreDiameter", "Расточка заходит за буртик: стенка тела при максимальном отверстии должна быть не менее 3 мм.");
         var minRemoval = 2 * (p.FinishAllowance + .05);
         if (p.StockDiameter - c.TargetFlangeDiameter < minRemoval - 1e-8) Error("stockDiameter", "Для буртика нужен чистовой припуск и не менее 0,05 мм чернового съёма на сторону.");
@@ -146,9 +163,9 @@ public static class Engine
         if (c.TargetFlangeDiameter - p.BodyDiameter < minRemoval - 1e-8) Error("bodyDiameter", "Перепад наружных расчётных диаметров слишком мал для данного чистового припуска.");
         if (c.TargetCounterboreDiameter - c.TargetBoreDiameter < minRemoval - 1e-8) Error("counterboreDiameter", "Перепад внутренних расчётных диаметров слишком мал для данного чистового припуска.");
         if (p.FinishAllowance > Math.Min(p.DepthOutside, p.DepthInside)) Error("finishAllowance", "Чистовой припуск не должен превышать разрешённую глубину прохода.");
-        if (p.StockBore - 2 * p.ClearanceX < 12) Error("clearanceX", "В исходном отверстии недостаточно места для отвода инструмента (минимальный X 12 мм).");
+        errors.AddRange(ToolingProfile.Validate(p, c));
         if (p.FeedFinish > p.FeedRough) Error("feedFinish", "Чистовая подача не должна превышать черновую.");
-        double Count(double difference, double depth) => Math.Max(0, Math.Ceiling((difference - 2 * p.FinishAllowance - 1e-8) / (2 * depth)));
+        double Count(double difference, double depth) => (double)Math.Max(0m, Math.Ceiling(((decimal)difference - 2m * (decimal)p.FinishAllowance) / (2m * (decimal)depth)));
         var passes = Count(p.StockDiameter - c.TargetFlangeDiameter, p.DepthOutside) + Count(p.StockDiameter - p.BodyDiameter, p.DepthOutside)
             + Count(c.TargetBoreDiameter - p.StockBore, p.DepthInside) + Count(c.TargetCounterboreDiameter - c.TargetBoreDiameter, p.DepthInside) + 4;
         if (passes > 400) Error("depthOutside", "Слишком много проходов (более 400): увеличьте глубину или уменьшите припуск.");
@@ -159,11 +176,17 @@ public static class Engine
     {
         if (!double.IsFinite(start) || !double.IsFinite(target) || !double.IsFinite(depth) || depth <= 0)
             throw new ArgumentOutOfRangeException(nameof(depth), "Параметры проходов должны быть конечными, глубина — положительной.");
-        var delta = target - start;
-        var count = Math.Max(0, Math.Ceiling((Math.Abs(delta) - 1e-8) / (2 * depth)));
+        decimal first, last, step;
+        try { first = (decimal)start; last = (decimal)target; step = (decimal)depth; }
+        catch (OverflowException) { throw new ArgumentOutOfRangeException(nameof(depth), "Параметры проходов превышают числовой диапазон."); }
+        if (step <= 0) throw new ArgumentOutOfRangeException(nameof(depth), "Глубина прохода слишком мала.");
+        var delta = last - first;
+        var count = Math.Ceiling(Math.Abs(delta) / (2m * step));
         if (count > 400) throw new ArgumentOutOfRangeException(nameof(depth), "Число проходов превышает предел 400.");
         var values = new List<double>();
-        for (var i = 1; i <= count; i++) values.Add(Round(i == count ? target : start + Math.Sign(delta) * Math.Min(2 * depth * i, Math.Abs(delta))));
+        // Равные доли полного съёма вместо полного шага с микроскопическим остатком.
+        for (var i = 1; i <= count; i++)
+            values.Add((double)Math.Round(i == count ? last : first + delta * i / count, 3, MidpointRounding.AwayFromZero));
         return values;
     }
 
@@ -181,10 +204,10 @@ public static class Engine
         var controls = HtmlCards.ControlDescription(p, c);
         var operations = new List<Operation>
         {
-            new("005", "Подготовка заготовки", "manual", $"Получить цилиндрическую заготовку Ø{Fmt(p.StockDiameter)} / Ø{Fmt(p.StockBore)} × {Fmt(c.StockLength)} мм со сквозным отверстием и подготовленным правым торцом. Метод получения отверстия и контроль выбираются технологом. Длина указана после подготовки торца."),
-            new("010", "Токарная с ЧПУ", "nc", $"Один установ за хвостовик {Fmt(p.GripLength)} мм. Z0 — правый подготовленный торец, Z− — к зажиму. Обработать буртик, тело, отверстие и расточку. Длина обработки {Fmt(c.CutLength)} мм включает задний припуск. Расчётные диаметры D={Fmt(c.TargetFlangeDiameter)}, d={Fmt(c.TargetBoreDiameter)}, d2={Fmt(c.TargetCounterboreDiameter)}; глубина h={Fmt(c.TargetCounterboreDepth)} мм."),
-            new("020", "Отделение и доводка", "manual", $"Отделить деталь с сохранением припуска {Fmt(p.TrimAllowance)} мм; переустановить и довести задний торец до расчётной длины {Fmt(c.TargetLength)} мм (номинал {Fmt(p.Length)}, границы {Fmt(p.Length + p.LengthLowerDeviation)}…{Fmt(p.Length + p.LengthUpperDeviation)} мм). Удалить заусенцы."),
-            new("030", "Контроль", "manual", controls + $" Проверить Db={Fmt(p.BodyDiameter)}, b={Fmt(p.FlangeWidth)} мм. Средства: микрометр/штангенциркуль, нутромер и глубиномер.")
+            new("005", "Подготовка заготовки", "manual", $"Принять предварительно обработанный полый полуфабрикат Ø{Fmt(p.StockDiameter)} / Ø{Fmt(p.StockBore)} × {Fmt(c.RawStockLength)} мм. Снять с переднего торца {Fmt(p.FrontFacingAllowance)} мм до длины {Fmt(c.StockLength)} мм; этот торец принять исходным. Отверстие сквозное, способ его получения находится вне данного процесса."),
+            new("010", "Токарная с ЧПУ", "nc", $"Один установ: длина зажима {Fmt(p.GripLength)} мм; отрезная полоса {Fmt(c.CutoffWidth)} мм и отдельный осевой зазор до кулачков {Fmt(p.ChuckClearance)} мм. Передняя плоскость кулачков Z={Fmt(c.JawsFrontZ)} мм. Z0 — подготовленный передний торец, Z− — к зажиму, X — диаметр. Обработать буртик, тело, отверстие и расточку на длине {Fmt(c.CutLength)} мм с задним припуском {Fmt(p.TrimAllowance)} мм. Цели D={Fmt(c.TargetFlangeDiameter)}, d={Fmt(c.TargetBoreDiameter)}, d2={Fmt(c.TargetCounterboreDiameter)}, h={Fmt(c.TargetCounterboreDepth)} мм. Галтели R≤{Fmt(ToolingProfile.MaximumCornerRadius)} при пластине R{Fmt(ToolingProfile.NoseRadius)}; непрерывная СОЖ."),
+            new("020", "Отделение и доводка", "manual", $"Отрезать лезвием {ToolingProfile.CutoffTool} с пластиной {ToolingProfile.CutoffInsert}: полоса Z={Fmt(c.PartingFrontZ)}…{Fmt(c.PartingBackZ)} мм, ширина {Fmt(c.CutoffWidth)} мм. Сохранить задний припуск {Fmt(p.TrimAllowance)} мм. Переустановить в мягкие кулачки по Db={Fmt(p.BodyDiameter)} мм с карманом Ø{Fmt(c.SoftJawPocketDiameter)} глубиной {Fmt(c.SoftJawPocketDepth)} мм и осевым упором по первому торцу. Контактный пояс от {Fmt(c.SecondClampStart)} до {Fmt(c.SecondClampEnd)} мм от первого торца; перед обработкой заднего торца требуется свободный участок не меньше {Fmt(ToolingProfile.SecondSetupFaceClearance)} мм. Снять задний припуск до длины {Fmt(c.TargetLength)} мм (границы {Fmt(p.Length + p.LengthLowerDeviation)}…{Fmt(p.Length + p.LengthUpperDeviation)}). Сохранить h={Fmt(c.TargetCounterboreDepth)} и b={Fmt(p.FlangeWidth)} мм от первого торца; удалить заусенцы."),
+            new("030", "Контроль", "manual", controls + $" Проверить Db={Fmt(p.BodyDiameter)} ±{Fmt(ToolingProfile.GeneralLinearTolerance(p.BodyDiameter))} и b={Fmt(p.FlangeWidth)} ±{Fmt(ToolingProfile.GeneralLinearTolerance(p.FlangeWidth))} мм ({ToolingProfile.GeneralToleranceDesignation}). Глубину h измерять от первого торца на плоской части уступа вне галтели R≤{Fmt(ToolingProfile.MaximumCornerRadius)}. Средства: микрометр/штангенциркуль, нутромер и глубиномер.")
         };
         var definitions = new[]
         {
@@ -205,6 +228,7 @@ public static class Engine
             $"(PARAMFORGE {Version} - {id})",
             "(NOT VERIFIED ON A MACHINE)",
             "(AXIOMA CONTROL - MM - X DIAMETER - OPERATION 010 ONLY)",
+            $"(TOOL OFFSETS: VIRTUAL SHARP TIP - NOSE R{Fmt(ToolingProfile.NoseRadius)})",
             $"(TARGETS D {Fmt(c.TargetFlangeDiameter)} d {Fmt(c.TargetBoreDiameter)} d2 {Fmt(c.TargetCounterboreDiameter)} L {Fmt(c.TargetLength)} h {Fmt(c.TargetCounterboreDepth)})"
         };
         var line = 0;
@@ -223,6 +247,7 @@ public static class Engine
         }
         Emit("G21 G18 G90 G94 G97 G40 G49 G80 G54");
         Emit("G10 X1");
+        Emit("M9");
         Emit("M5");
         foreach (var d in definitions)
         {
@@ -235,9 +260,10 @@ public static class Engine
             };
             if (d.Tool != activeTool)
             {
-                if (activeTool != 0) { Move("G0", c.ClearOut, p.ClearanceZ, null); Emit("G94"); Emit("M5"); }
+                if (activeTool != 0) { Move("G0", c.ClearOut, p.ClearanceZ, null); Emit("G94"); Emit("M9"); Emit("M5"); }
                 Emit($"T{d.Tool} D1 M66");
                 Emit("G43");
+                Emit("M8");
                 activeTool = d.Tool;
             }
             lines.Add($"(TR {d.Id} {d.Tag})");
@@ -265,7 +291,7 @@ public static class Engine
             }
             transitions.Add(t);
         }
-        Move("G0", c.ClearIn, p.ClearanceZ, null); Move("G0", c.ClearOut, p.ClearanceZ, null); Emit("G94"); Emit("M5"); Emit("M30");
+        Move("G0", c.ClearIn, p.ClearanceZ, null); Move("G0", c.ClearOut, p.ClearanceZ, null); Emit("G94"); Emit("M9"); Emit("M5"); Emit("M30");
         c = c with { TotalCutMinutes = transitions.Sum(t => t.CutMinutes) };
         var nc = string.Join("\r\n", lines) + "\r\n";
         var verification = NcVerifier.Verify(nc, p);

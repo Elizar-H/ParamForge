@@ -129,12 +129,12 @@ internal static class Program
 
     private static void RegisterTests()
     {
-        Add("field schema exposes exactly 30 numeric parameters", () =>
+        Add("field schema exposes exactly 32 numeric parameters", () =>
         {
-            Equal(30, Engine.Fields.Count, "numeric field count");
-            Equal(30, Engine.Fields.Select(f => f.Key).Distinct(StringComparer.Ordinal).Count(), "unique field keys");
+            Equal(32, Engine.Fields.Count, "numeric field count");
+            Equal(32, Engine.Fields.Select(f => f.Key).Distinct(StringComparer.Ordinal).Count(), "unique field keys");
             var numericProperties = typeof(Parameters).GetProperties().Where(p => p.PropertyType == typeof(double)).ToArray();
-            Equal(30, numericProperties.Length, "numeric property count");
+            Equal(32, numericProperties.Length, "numeric property count");
             foreach (var f in Engine.Fields)
             {
                 var property = ParameterProperty(f.Key);
@@ -152,7 +152,7 @@ internal static class Program
             Near(-.18, p.Params.CounterboreDepthLowerDeviation); Near(.18, p.Params.CounterboreDepthUpperDeviation);
             Near(47.8, c.TargetBoreDiameter); Near(75.37, c.TargetCounterboreDiameter);
             Near(119.565, c.TargetFlangeDiameter); Near(115.5, c.TargetLength); Near(28, c.TargetCounterboreDepth);
-            Near(117.5, c.CutLength); Near(142.5, c.StockLength); Near(128, c.ClearOut); Near(41, c.ClearIn);
+            Near(117.5, c.CutLength); Near(155.5, c.StockLength); Near(157.5, c.RawStockLength); Near(128, c.ClearOut); Near(41, c.ClearIn);
             Sequence(new[] { "005", "010", "020", "030" }, p.Operations.Select(o => o.Code));
             Sequence(new[] { 2, 1, 6, 1, 2, 1, 14, 1 }, p.Transitions.Select(t => t.Passes.Count));
             Near(119.565, p.Transitions[1].Diameter); Near(47.8, p.Transitions[5].Diameter); Near(75.37, p.Transitions[7].Diameter);
@@ -264,18 +264,18 @@ internal static class Program
         });
         Add("worst-case wall thickness accepts 3 mm and rejects 2.9995 mm", () =>
         {
-            Generated(Engine.Defaults with { BodyDiameter = 81.74 });
-            Rejected(Engine.Defaults with { BodyDiameter = 81.739 }, "counterboreDiameter");
-            var confined = Engine.Defaults with { CounterboreDepth = 10, BodyDiameter = 54.3 };
+            Generated(Engine.Defaults with { BodyDiameter = 82.04 });
+            Rejected(Engine.Defaults with { BodyDiameter = 82.039 }, "counterboreDiameter");
+            var confined = Engine.Defaults with { CounterboreDepth = 10, BodyDiameter = 54.6 };
             Generated(confined);
-            Rejected(confined with { BodyDiameter = 54.299 }, "boreDiameter");
+            Rejected(confined with { BodyDiameter = 54.599 }, "boreDiameter");
             var flangeWall = Engine.Defaults with { CounterboreDepth = 10, CounterboreDiameter = 112.39 };
             Generated(flangeWall);
             Rejected(flangeWall with { CounterboreDiameter = 112.391 }, "counterboreDiameter");
         });
         Add("counterbore topology uses maximum depth rather than midpoint depth", () =>
         {
-            var confined = Engine.Defaults with { CounterboreDiameter = 110, CounterboreDepth = 12, CounterboreDepthLowerDeviation = 0, CounterboreDepthUpperDeviation = 0 };
+            var confined = Engine.Defaults with { CounterboreDiameter = 110, CounterboreDepth = 11.8, CounterboreDepthLowerDeviation = 0, CounterboreDepthUpperDeviation = 0 };
             Generated(confined);
             Rejected(confined with { CounterboreDepthUpperDeviation = .001 }, "counterboreDiameter");
             Rejected(confined with { CounterboreDepthLowerDeviation = -.18, CounterboreDepthUpperDeviation = .18 }, "counterboreDiameter");
@@ -327,12 +327,12 @@ internal static class Program
         {
             var project = Generated(Engine.Defaults with
             {
-                Length = 20.002, LengthLowerDeviation = 0, LengthUpperDeviation = .001,
+                Length = 60.002, LengthLowerDeviation = 0, LengthUpperDeviation = .001,
                 CounterboreDepth = 10
             });
-            Near(20.003, project.Calculations.TargetLength);
-            Near(22.003, project.Calculations.CutLength);
-            Check(project.Nc.Contains("Z-22.003", StringComparison.Ordinal), "NC reaches the correct decimal length boundary");
+            Near(60.003, project.Calculations.TargetLength);
+            Near(62.003, project.Calculations.CutLength);
+            Check(project.Nc.Contains("Z-62.003", StringComparison.Ordinal), "NC reaches the correct decimal length boundary");
             var verified = NcVerifier.Verify(project.Nc, project.Params);
             Check(verified.Ok, string.Join("; ", verified.Errors));
         });
@@ -367,14 +367,227 @@ internal static class Program
         });
         Add("length and counterbore depth edits propagate to cuts, NC, cards and time", () =>
         {
-            var a = Generated(); var b = Generated(Engine.Defaults with { Length = 140 });
-            Near(166.5, b.Calculations.StockLength); Near(-141.5, b.Transitions[2].ZEnd);
-            Check(b.Nc.Contains("Z-141.5", StringComparison.Ordinal), "NC length");
-            Check(b.RouteHtml.Contains("140", StringComparison.Ordinal), "route length");
-            Check(b.TechnologyHtml.Contains("141.5", StringComparison.Ordinal), "technology cut length");
-            Check(b.Calculations.TotalCutMinutes > a.Calculations.TotalCutMinutes, "longer cuts take longer");
+            var a = Generated(); var b = Generated(Engine.Defaults with { Length = 100 });
+            Near(139.5, b.Calculations.StockLength); Near(-101.5, b.Transitions[2].ZEnd);
+            Check(b.Nc.Contains("Z-101.5", StringComparison.Ordinal), "NC length");
+            Check(b.RouteHtml.Contains("100", StringComparison.Ordinal), "route length");
+            Check(b.TechnologyHtml.Contains("101.5", StringComparison.Ordinal), "technology cut length");
+            Check(b.Calculations.TotalCutMinutes < a.Calculations.TotalCutMinutes, "shorter cuts take less time");
             var deep = Generated(Engine.Defaults with { CounterboreDepth = 40 });
             Near(-40, deep.Transitions[7].ZEnd); Near(-117.5, deep.Transitions[5].ZEnd);
+        });
+        Add("prepared and raw stock lengths conserve each independent axial allowance", () =>
+        {
+            var project = Generated(); var p = project.Params; var c = project.Calculations;
+            Near(2, p.TrimAllowance); Near(3, c.CutoffWidth); Near(10, p.ChuckClearance);
+            Near(25, p.GripLength); Near(2, p.FrontFacingAllowance);
+            Near(6, ToolingProfile.CutoffHolderAxialProjection);
+            Near(4, ToolingProfile.ChuckRequiredResidualClearance);
+            Near(ToolingProfile.ChuckMinimumClearance, p.ChuckClearance);
+            Check(p.ChuckClearance - ToolingProfile.CutoffHolderAxialProjection >= ToolingProfile.ChuckRequiredResidualClearance,
+                "10-mm axial clearance retains 4 mm beyond the selected 6-mm project holder envelope");
+            Near(117.5, c.CutLength); Near(-117.5, c.PartingFrontZ);
+            Near(-120.5, c.PartingBackZ); Near(-130.5, c.JawsFrontZ);
+            Near(155.5, c.StockLength); Near(157.5, c.RawStockLength);
+            Near(c.TargetLength + p.TrimAllowance, c.CutLength);
+            Near(c.CutLength + c.CutoffWidth + p.ChuckClearance + p.GripLength, c.StockLength);
+            Near(c.StockLength + p.FrontFacingAllowance, c.RawStockLength);
+            Near(c.CutoffWidth, c.PartingFrontZ - c.PartingBackZ);
+            Near(p.ChuckClearance, c.PartingBackZ - c.JawsFrontZ);
+            Near(p.GripLength, c.StockLength + c.JawsFrontZ);
+            Check(c.PartingFrontZ > c.PartingBackZ && c.PartingBackZ > c.JawsFrontZ, "kerf is outside the jaw front");
+            Evidence["axialStockBudget"] = new
+            {
+                c.TargetLength, p.TrimAllowance, c.CutoffWidth, p.ChuckClearance, p.GripLength,
+                p.FrontFacingAllowance, c.CutLength, c.StockLength, c.RawStockLength,
+                c.PartingFrontZ, c.PartingBackZ, c.JawsFrontZ
+            };
+        });
+        Add("rear trim is counted once while the right-face step references remain unchanged", () =>
+        {
+            var first = Generated();
+            var moreTrim = Generated(Engine.Defaults with { TrimAllowance = 3 });
+            Near(first.Calculations.TargetLength, moreTrim.Calculations.TargetLength);
+            Near(first.Calculations.CutLength + 1, moreTrim.Calculations.CutLength);
+            Near(first.Calculations.StockLength + 1, moreTrim.Calculations.StockLength);
+            Near(first.Calculations.RawStockLength + 1, moreTrim.Calculations.RawStockLength);
+            Near(first.Calculations.PartingFrontZ - 1, moreTrim.Calculations.PartingFrontZ);
+            Near(first.Calculations.PartingBackZ - 1, moreTrim.Calculations.PartingBackZ);
+            Near(first.Calculations.JawsFrontZ - 1, moreTrim.Calculations.JawsFrontZ);
+            foreach (var id in new[] { "010.01", "010.02", "010.03", "010.04", "010.07", "010.08" })
+            {
+                var a = first.Transitions.Single(t => t.Id == id); var b = moreTrim.Transitions.Single(t => t.Id == id);
+                Near(a.ZStart, b.ZStart);
+                if (id is "010.01" or "010.02" or "010.07" or "010.08") Near(a.ZEnd, b.ZEnd);
+            }
+            foreach (var changed in new[]
+            {
+                Generated(Engine.Defaults with { ChuckClearance = 11 }),
+                Generated(Engine.Defaults with { GripLength = 26 }),
+                Generated(Engine.Defaults with { FrontFacingAllowance = 3 })
+            })
+            {
+                Near(first.Calculations.CutLength, changed.Calculations.CutLength);
+                Near(first.Calculations.RawStockLength + 1, changed.Calculations.RawStockLength);
+                Equal(first.Nc, changed.Nc.Replace(changed.Id, first.Id, StringComparison.Ordinal), "non-cutting stock allowances do not move the cutting path");
+            }
+        });
+        Add("second setup has a defined clamping belt and flange pocket from the first-face datum", () =>
+        {
+            Near(25, ToolingProfile.SecondSetupGripLength);
+            Near(2, ToolingProfile.SoftJawBeltStartClearance);
+            Near(1, ToolingProfile.SoftJawPocketAxialClearance);
+            Near(1, ToolingProfile.SoftJawPocketDiametralClearance);
+            Near(5, ToolingProfile.SecondSetupFaceClearance);
+            var baseline = Generated();
+            Near(14.2, baseline.Calculations.SecondClampStart);
+            Near(39.2, baseline.Calculations.SecondClampEnd);
+            Near(121, baseline.Calculations.SoftJawPocketDiameter);
+            Near(13.2, baseline.Calculations.SoftJawPocketDepth);
+            foreach (var project in new[]
+            {
+                baseline,
+                Generated(Engine.Defaults with { FlangeWidth = 30 }),
+                Generated(Engine.Defaults with { FlangeWidth = 30.001 }),
+                Generated(Engine.Defaults with { FlangeDiameter = 121, FlangeUpperDeviation = .2 })
+            })
+            {
+                var p = project.Params; var c = project.Calculations;
+                var expectedWidthTolerance = p.FlangeWidth <= 30 ? .2m : .3m;
+                var expectedStart = (decimal)p.FlangeWidth + expectedWidthTolerance + 2m;
+                Near((double)expectedStart, c.SecondClampStart);
+                Near((double)(expectedStart + 25m), c.SecondClampEnd);
+                Near((double)((decimal)p.FlangeDiameter + (decimal)p.FlangeUpperDeviation + 1m), c.SoftJawPocketDiameter);
+                Near((double)((decimal)p.FlangeWidth + expectedWidthTolerance + 1m), c.SoftJawPocketDepth);
+                Check(p.Length + p.LengthLowerDeviation - c.SecondClampEnd >= 5 - 1e-8, "minimum final length leaves the required facing gap beyond the clamping belt");
+            }
+            var moreRearTrim = Generated(Engine.Defaults with { TrimAllowance = 3 });
+            Near(baseline.Calculations.SecondClampStart, moreRearTrim.Calculations.SecondClampStart);
+            Near(baseline.Calculations.SecondClampEnd, moreRearTrim.Calculations.SecondClampEnd);
+            Near(baseline.Calculations.SoftJawPocketDiameter, moreRearTrim.Calculations.SoftJawPocketDiameter);
+            Near(baseline.Calculations.SoftJawPocketDepth, moreRearTrim.Calculations.SoftJawPocketDepth);
+            Evidence["secondSetupGeometry"] = new
+            {
+                baseline.Calculations.SecondClampStart, baseline.Calculations.SecondClampEnd,
+                baseline.Calculations.SoftJawPocketDiameter, baseline.Calculations.SoftJawPocketDepth
+            };
+        });
+        Add("second-setup clamping rejects a short part and checks the minimum tolerance limit", () =>
+        {
+            var shortPart = Engine.Defaults with
+            {
+                Length = 20, LengthLowerDeviation = 0, LengthUpperDeviation = 0,
+                FlangeWidth = 2, CounterboreDepth = 1,
+                CounterboreDepthLowerDeviation = 0, CounterboreDepthUpperDeviation = 0
+            };
+            var rejected = Engine.Generate(shortPart);
+            Check(!rejected.Ok && rejected.Project is null, "short but drawable geometry must not produce this process");
+            Check(rejected.Errors.Any(error => error.Field == "length" && error.Message.Contains("второго установа", StringComparison.Ordinal)), "rejection identifies the unsupported second setup");
+            var exact = Generated(Engine.Defaults with { Length = 44.2, LengthLowerDeviation = 0, LengthUpperDeviation = 0 });
+            Near(5, exact.Params.Length - exact.Calculations.SecondClampEnd);
+            Rejected(exact.Params with { Length = 44.199 }, "length");
+            Rejected(exact.Params with { LengthLowerDeviation = -.001 }, "length");
+        });
+        Add("the installed boring bar limits process depth and minimum entry geometry", () =>
+        {
+            Near(32, ToolingProfile.BoringBarDiameter); Near(40, ToolingProfile.BoringMinimumDiameter);
+            Near(125, ToolingProfile.BoringOverhang); Near(128, ToolingProfile.BoringMaximumOverhang);
+            Near(5, ToolingProfile.HolderFrontClearance);
+            Near(128, ToolingProfile.BoringClampLength); Near(300, ToolingProfile.BoringFunctionalLength);
+            Near(.4, ToolingProfile.NoseRadius); Near(.5, ToolingProfile.MaximumCornerRadius);
+            var exact = Generated(Engine.Defaults with { Length = 118, LengthLowerDeviation = 0, LengthUpperDeviation = 0 });
+            Near(120, exact.Calculations.CutLength);
+            Near(5, ToolingProfile.BoringOverhang - exact.Calculations.CutLength);
+            Rejected(exact.Params with { Length = 118.001 });
+            Rejected(Engine.Defaults with { Length = 250 });
+            Rejected(Engine.Defaults with { BoreDiameter = 20, StockBore = 18, ClearanceX = .5 });
+            Rejected(Engine.Defaults with { GripLength = 24.999 });
+            Rejected(Engine.Defaults with { ChuckClearance = 9.999 });
+            Generated(Engine.Defaults with { StockBore = 44 });
+            Rejected(Engine.Defaults with { StockBore = 43.999 });
+        });
+        Add("general class m tolerances cover the body diameter and flange width", () =>
+        {
+            Near(.3, ToolingProfile.GeneralLinearTolerance(100));
+            Near(.2, ToolingProfile.GeneralLinearTolerance(12));
+            Near(.2, ToolingProfile.GeneralLinearTolerance(30));
+            Near(.3, ToolingProfile.GeneralLinearTolerance(30.001));
+            Near(.3, ToolingProfile.GeneralLinearTolerance(120));
+            Near(.5, ToolingProfile.GeneralLinearTolerance(120.001));
+            var p = Generated();
+            Near(100, p.Params.BodyDiameter); Near(12, p.Params.FlangeWidth);
+            Check(p.TechnologyHtml.Contains("0.4", StringComparison.Ordinal) || p.TechnologyHtml.Contains("0,4", StringComparison.Ordinal), "operation data identify the selected nose radius");
+        });
+        Add("maximum permitted corner radius leaves shoulder flats within all tolerance limits", () =>
+        {
+            Rejected(Engine.Defaults with { BodyDiameter = 117.83 }, "bodyDiameter");
+            Generated(Engine.Defaults with { BodyDiameter = 117.828 });
+            var shortBody = Engine.Defaults with
+            {
+                Length = 20, LengthLowerDeviation = 0, LengthUpperDeviation = 0,
+                CounterboreDepth = 10, FlangeWidth = 19.3
+            };
+            Rejected(shortBody);
+            Rejected(shortBody with { FlangeWidth = 19.299 }, "length");
+            Rejected(Engine.Defaults with { CounterboreDepth = 1, CounterboreDepthLowerDeviation = -.5, CounterboreDepthUpperDeviation = 0 });
+            Generated(Engine.Defaults with { CounterboreDepth = 1, CounterboreDepthLowerDeviation = -.499, CounterboreDepthUpperDeviation = 0 });
+        });
+        Add("balanced pass allocation avoids the previous tiny final roughing cut", () =>
+        {
+            var flange = Generated().Transitions.Single(t => t.Id == "010.01");
+            Sequence(new[] { 121.983, 119.965 }, flange.Passes);
+            var previous = flange.StartDiameter;
+            var depths = new List<double>();
+            foreach (var diameter in flange.Passes) { depths.Add((previous - diameter) / 2); previous = diameter; }
+            Near(1.0085, depths[0]); Near(1.009, depths[1]);
+            Check(depths.Min() > 1, "no 0.0175-mm residual roughing pass remains");
+        });
+        Add("actual maximum depths come from rounded passes and remain distinct from requested limits", () =>
+        {
+            var p = Generated();
+            var expected = new[] { 1.009, .2, 1.967, .2, .6, .2, .9705, .2 };
+            for (var i = 0; i < p.Transitions.Count; i++)
+            {
+                var transition = p.Transitions[i];
+                Near(expected[i], transition.ActualMaximumDepth);
+                Near(IndependentMaximumDepth(transition), transition.ActualMaximumDepth);
+                Check(transition.ActualMaximumDepth <= transition.Depth + .000501, "actual depth respects the requested pass limit");
+            }
+            Near(2, p.Transitions[0].Depth);
+            Near(1.0085, (double)(((decimal)p.Transitions[0].StartDiameter - (decimal)p.Transitions[0].Passes[0]) / 2m));
+            Check(p.Transitions[0].ActualMaximumDepth != p.Transitions[0].Depth, "operation-card t must not silently equal the requested 2-mm limit");
+        });
+        Add("balanced pass allocation uses decimal ceil and rounded equal spacing in both directions", () =>
+        {
+            foreach (var sample in new[]
+            {
+                (Start: 124d, Target: 119.965, Depth: 2d),
+                (Start: 45d, Target: 47.4, Depth: 1d),
+                (Start: 47.8, Target: 74.97, Depth: 1d),
+                (Start: 100d, Target: 99.4, Depth: .1),
+                (Start: 99.4, Target: 100d, Depth: .1),
+                (Start: 100d, Target: 99.399, Depth: .1),
+                (Start: 100d, Target: 99.401, Depth: .1),
+                (Start: 100d, Target: 99.995, Depth: .001),
+                (Start: 99.995, Target: 100d, Depth: .001)
+            })
+            {
+                var pass = Engine.PassDiameters(sample.Start, sample.Target, sample.Depth);
+                var delta = Math.Abs((decimal)sample.Target - (decimal)sample.Start);
+                var count = (int)decimal.Ceiling(delta / (2m * (decimal)sample.Depth));
+                Equal(count, pass.Count, "minimum pass count without binary ceil overcounting");
+                Near(sample.Target, pass[^1]);
+                var previous = sample.Start;
+                for (var i = 0; i < pass.Count; i++)
+                {
+                    var expected = (double)Math.Round((decimal)sample.Start + ((decimal)sample.Target - (decimal)sample.Start) * (i + 1) / count, 3, MidpointRounding.AwayFromZero);
+                    Near(expected, pass[i]);
+                    Check(Math.Abs(pass[i] - previous) / 2 <= sample.Depth + .000501, "rounded physical depth is bounded");
+                    Check(Math.Sign(pass[i] - previous) == Math.Sign(sample.Target - sample.Start), "passes remain monotonic");
+                    previous = pass[i];
+                }
+            }
+            Sequence(Array.Empty<double>(), Engine.PassDiameters(100, 100, 1));
         });
         Add("HTML metadata is escaped and cannot become NC instructions", () =>
         {
@@ -404,7 +617,7 @@ internal static class Program
         });
         Add("independent NC reading reconstructs generated coordinates and G1 time", () =>
         {
-            foreach (var p in new[] { Generated(), Generated(Engine.Defaults with { Length = 140 }), Generated(Engine.Defaults with { BodyDiameter = 95, DepthOutside = 1 }), Generated(Engine.Defaults with { CounterboreDepth = 40 }) })
+            foreach (var p in new[] { Generated(), Generated(Engine.Defaults with { Length = 100 }), Generated(Engine.Defaults with { BodyDiameter = 95, DepthOutside = 1 }), Generated(Engine.Defaults with { CounterboreDepth = 40 }) })
                 CheckNcAgreement(p);
         });
         Add("80 valid deterministic variants retain targets, pass caps and NC agreement", () =>
@@ -413,7 +626,7 @@ internal static class Program
             {
                 var p = Generated(Engine.Defaults with
                 {
-                    Length = 80 + i, FlangeWidth = 8 + i % 8, CounterboreDepth = 18 + i % 30,
+                    Length = 60 + i % 59, FlangeWidth = 8 + i % 8, CounterboreDepth = 18 + i % 30,
                     BodyDiameter = 90 + i % 15, CuttingSpeed = 40 + i,
                     DepthOutside = .5 + i % 5 * .5, DepthInside = .3 + i % 3 * .3, FinishAllowance = .1
                 });
@@ -486,14 +699,32 @@ internal static class Program
             Check(t.Passes.Count > 0, "empty transition " + t.Id);
             var previous = t.StartDiameter;
             var direction = Math.Sign(t.Diameter - previous);
+            var count = (int)decimal.Ceiling(Math.Abs((decimal)t.Diameter - (decimal)t.StartDiameter) / (2m * (decimal)t.Depth));
+            Equal(count, t.Passes.Count, "minimum balanced pass count " + t.Id);
+            var workingDepths = new List<double>();
             foreach (var d in t.Passes)
             {
-                Check(Math.Abs(d - previous) / 2 <= t.Depth + 1e-9, "radial depth cap " + t.Id);
+                workingDepths.Add(Math.Abs(d - previous) / 2);
+                Check(Math.Abs(d - previous) / 2 <= t.Depth + .000501, "radial depth cap including coordinate rounding " + t.Id);
                 Check(Math.Sign(d - previous) == direction, "monotonic pass " + t.Id);
                 previous = d;
             }
             Near(t.Diameter, previous);
+            Near(IndependentMaximumDepth(t), t.ActualMaximumDepth);
+            Check(workingDepths.Max() - workingDepths.Min() <= .001001, "balanced working depths avoid a tiny residual " + t.Id);
         }
+    }
+    private static double IndependentMaximumDepth(Transition transition)
+    {
+        var previous = (decimal)transition.StartDiameter;
+        decimal maximum = 0;
+        foreach (var pass in transition.Passes)
+        {
+            var current = (decimal)pass;
+            maximum = Math.Max(maximum, Math.Abs(current - previous) / 2m);
+            previous = current;
+        }
+        return (double)maximum;
     }
     private static void CheckNcAgreement(Project p)
     {
@@ -552,8 +783,10 @@ internal static class Program
         N10 G21 G18 G90 G94 G97 G40 G49 G80 G54
         N11 G10 X1
         N12 M5
+        N13 M9
         N20 T1 D1 M66
         N21 G43
+        N22 M8
         N30 S100 M3
         N31 G95
         N40 G0 X128 Z3
@@ -561,6 +794,7 @@ internal static class Program
         N60 G1 X120 Z-12 F0.2
         N70 G1 X124 Z-12 F0.2
         N75 G94
+        N78 M9
         N80 M5
         N90 M30
         """.ReplaceLineEndings("\r\n");
@@ -657,6 +891,12 @@ internal static class Program
             ("G95 before spindle speed is set", "N12 M5", "N12 G95\r\nN13 G94\r\nN14 M5"),
             ("G95 without running spindle", "N31 G95", "N31 M5\r\nN32 G95"),
             ("missing feed-per-revolution mode", "N31 G95", "(G95 omitted)"),
+            ("missing initial coolant-off confirmation", "N13 M9", "(initial M9 omitted)"),
+            ("coolant command in a movement block", "N60 G1", "N60 M8 G1"),
+            ("coolant-off command in a return movement block", "N78 M9", "N78 M9 G0 X128 Z3"),
+            ("missing continuous coolant before cutting", "N22 M8", "(M8 omitted)"),
+            ("coolant switched off before cutting", "N50 G0", "N49 M9\r\nN50 G0"),
+            ("coolant left on at program end", "N78 M9", "(M9 omitted)"),
             ("G94 during cutting", "N60 G1", "N59 G94\r\nN60 G1"),
             ("M5 while G95 is active", "N75 G94", "(G94 omitted)"),
             ("conflicting feed modes", "N31 G95", "N31 G94 G95"),
@@ -688,13 +928,15 @@ internal static class Program
         Add("tool change requires fresh G0 and resets the unknown position", () =>
         {
             var changed = Fixture.Replace("N70 G1 X124 Z-12 F0.2",
-                "N61 G94\r\nN62 M5\r\nN63 T2 D1 M66\r\nN64 G43\r\nN65 S100 M3\r\nN66 G95\r\nN70 G1 X41 Z-12 F0.2", StringComparison.Ordinal);
+                "N61 G94\r\nN62 M5\r\nN63 M9\r\nN64 T2 D1 M66\r\nN65 G43\r\nN66 M8\r\nN67 S100 M3\r\nN68 G95\r\nN70 G1 X41 Z-12 F0.2", StringComparison.Ordinal);
             InvalidNc(changed);
-            var valid = changed.Replace("N70 G1 X41 Z-12 F0.2", "N67 G0 X41 Z3\r\nN70 G1 X41 Z-12 F0.2", StringComparison.Ordinal);
+            var valid = changed.Replace("N70 G1 X41 Z-12 F0.2", "N69 G0 X41 Z3\r\nN70 G1 X41 Z-12 F0.2", StringComparison.Ordinal);
             var v = NcVerifier.Verify(valid, Engine.Defaults);
             Check(v.Ok, string.Join("; ", v.Errors)); Near(1.5, v.CutMinutes, 1e-12);
-            InvalidNc(valid.Replace("N64 G43", "(second G43 omitted)", StringComparison.Ordinal));
-            InvalidNc(valid.Replace("N66 G95", "(second G95 omitted)", StringComparison.Ordinal));
+            InvalidNc(valid.Replace("N65 G43", "(second G43 omitted)", StringComparison.Ordinal));
+            InvalidNc(valid.Replace("N68 G95", "(second G95 omitted)", StringComparison.Ordinal));
+            InvalidNc(valid.Replace("N63 M9", "(M9 before second tool omitted)", StringComparison.Ordinal));
+            InvalidNc(valid.Replace("N66 M8", "(M8 for second tool omitted)", StringComparison.Ordinal));
         });
         Add("feed-mode changes require a new cutting feed after returning to G95", () =>
         {
@@ -742,12 +984,12 @@ internal static class Program
         Add("JSON partial inputs and supported wrappers merge with typed defaults", () =>
         {
             using var temp = new TempWorkspace();
-            foreach (var json in new[] { "{\"length\":140}", "{\"params\":{\"length\":140}}", "{\"project\":{\"params\":{\"length\":140}}}" })
+            foreach (var json in new[] { "{\"length\":100}", "{\"params\":{\"length\":100}}", "{\"project\":{\"params\":{\"length\":100}}}" })
             {
                 var path = temp.Write("input.json", json);
                 var p = ProjectFiles.ImportParameters(path);
-                Near(140, p.Length); Near(47.3, p.BoreDiameter); Near(-1, p.LengthLowerDeviation);
-                Near(166.5, Generated(p).Calculations.StockLength);
+                Near(100, p.Length); Near(47.3, p.BoreDiameter); Near(-1, p.LengthLowerDeviation);
+                Near(139.5, Generated(p).Calculations.StockLength);
             }
             var empty = ProjectFiles.ImportParameters(temp.Write("empty.json", "{}"));
             Equal(Engine.Defaults, empty, "empty object has complete defaults");
@@ -757,10 +999,10 @@ internal static class Program
             "null", "[]", "\"text\"", "{", "{\"misspelled\":2}", "{\"__proto__\":3}",
             "{\"length\":\"116\"}", "{\"length\":null}", "{\"length\":true}", "{\"length\":1e400}",
             "{\"length\":NaN}", "{\"length\":0}", "{\"length\":116.00001}", "{\"Length\":116}",
-            "{\"material\":null}", "{\"material\":12}", "{\"length\":116,\"length\":140}",
+            "{\"material\":null}", "{\"material\":12}", "{\"length\":116,\"length\":100}",
             "{\"params\":[]}", "{\"params\":{},\"unknown\":1}", "{\"params\":{},\"params\":{}}",
             "{\"project\":null}", "{\"project\":{}}", "{\"project\":{\"params\":{},\"ignored\":1}}",
-            "{\"project\":{\"params\":{}},\"ignored\":1}", "{\"params\":{\"length\":116,\"length\":140}}"
+            "{\"project\":{\"params\":{}},\"ignored\":1}", "{\"params\":{\"length\":116,\"length\":100}}"
         })
         {
             var invalid = json;
@@ -782,7 +1024,7 @@ internal static class Program
         Add("parameter save is separate from the exact three-file reproducible export", () =>
         {
             using var temp = new TempWorkspace();
-            var p = Generated(Engine.Defaults with { PartName = "Втулка <A>&", Length = 140, DepthOutside = .7 });
+            var p = Generated(Engine.Defaults with { PartName = "Втулка <A>&", Length = 100, DepthOutside = .7 });
             var saved = Path.Combine(temp.Root, "saved.json");
             ProjectFiles.SaveParameters(p, saved);
             var imported = ProjectFiles.ImportParameters(saved);
@@ -829,7 +1071,7 @@ internal static class Program
             var projects = new[]
             {
                 Generated(Engine.Defaults with { PartName = "Concurrent A", Length = 100 }),
-                Generated(Engine.Defaults with { PartName = "Concurrent B", Length = 140, CounterboreDepth = 40 })
+                Generated(Engine.Defaults with { PartName = "Concurrent B", Length = 100, CounterboreDepth = 40 })
             };
             var references = projects.Select((project, index) => ProjectFiles.Export(project, Path.Combine(temp.Root, "reference-" + index)))
                 .Select(files => files.ToDictionary(file => Path.GetFileName(file)!, File.ReadAllBytes, StringComparer.Ordinal)).ToArray();
@@ -863,7 +1105,7 @@ internal static class Program
         {
             using var temp = new TempWorkspace();
             var first = Generated();
-            var replacement = Generated(Engine.Defaults with { Length = 140, CounterboreDepth = 40 });
+            var replacement = Generated(Engine.Defaults with { Length = 100, CounterboreDepth = 40 });
             var path = Path.Combine(temp.Root, "saved.json");
             ProjectFiles.SaveParameters(first, path);
             Equal(first.Params, ProjectFiles.ImportParameters(path), "new parameter file imports");
@@ -896,8 +1138,8 @@ internal static class Program
         Add("reordered JSON keys have identical revision and NC", () =>
         {
             using var temp = new TempWorkspace();
-            var a = ProjectFiles.ImportParameters(temp.Write("a.json", "{\"length\":140,\"bodyDiameter\":95}"));
-            var b = ProjectFiles.ImportParameters(temp.Write("b.json", "{\"bodyDiameter\":95,\"length\":140}"));
+            var a = ProjectFiles.ImportParameters(temp.Write("a.json", "{\"length\":100,\"bodyDiameter\":95}"));
+            var b = ProjectFiles.ImportParameters(temp.Write("b.json", "{\"bodyDiameter\":95,\"length\":100}"));
             Equal(Generated(a).Id, Generated(b).Id); Equal(Generated(a).Nc, Generated(b).Nc);
         });
         Add("Word process forms have editable OOXML, service fields and page geometry", () =>
@@ -939,7 +1181,7 @@ internal static class Program
             var p = Generated();
             var changes = new[]
             {
-                p with { Params = p.Params with { Length = 140 } },
+                p with { Params = p.Params with { Length = 100 } },
                 p with { RouteHtml = p.RouteHtml + "<p>stale</p>" },
                 p with { Nc = p.Nc.Replace("F0.2", "F0.19", StringComparison.Ordinal) },
                 p with { Moves = p.Moves.Skip(1).ToList() }
@@ -1080,12 +1322,28 @@ internal static class Program
             .Select(cell => string.Join(" ", cell.Descendants(w + "t").Select(t => t.Value)).Trim()).ToArray()).ToArray();
         var text = string.Join(" ", document.Descendants(w + "t").Select(t => t.Value));
         Check(text.Contains("010", StringComparison.Ordinal), "NC operation 010 belongs to both cards");
+        var cells = rows.SelectMany(row => row).ToArray();
+        var nominalCells = cells.Where(cell => cell.StartsWith("Номиналы и отклонения", StringComparison.Ordinal)).ToArray();
+        Equal(1, nominalCells.Length, "confirmed five-dimension acceptance is stated once");
+        Check(!Regex.IsMatch(nominalCells[0], @"\bDb\b|(?<!\w)b\s+\d"), "body and flange-width acceptance are not duplicated as confirmed photo tolerances");
+        var generalCells = cells.Where(cell => cell.StartsWith("Db ", StringComparison.Ordinal)).ToArray();
+        Equal(1, generalCells.Length, "general body and flange-width acceptance is stated once");
+        string Ru(double value) => value.ToString("0.###", CultureInfo.GetCultureInfo("ru-RU"));
+        Check(generalCells[0].Contains("Db " + Ru(p.Params.BodyDiameter) + " ±" + Ru(ToolingProfile.GeneralLinearTolerance(p.Params.BodyDiameter)), StringComparison.Ordinal), "body general tolerance is explicit");
+        Check(generalCells[0].Contains("b " + Ru(p.Params.FlangeWidth) + " ±" + Ru(ToolingProfile.GeneralLinearTolerance(p.Params.FlangeWidth)), StringComparison.Ordinal), "flange-width general tolerance is explicit");
+        Check(generalCells[0].Contains("R≤0,5", StringComparison.Ordinal), "maximum allowed corner radius is explicit");
         if (route)
         {
             Check(Regex.IsMatch(text, @"Форма\s*1\b", RegexOptions.IgnoreCase), "route form 1 designation");
             foreach (var marker in new[] { "А", "Б" })
                 Check(rows.Any(row => row.Length > 0 && Regex.IsMatch(row[0], "^" + marker + @"\s*\d*$")), "route service marker " + marker);
             foreach (var operation in p.Operations) Check(text.Contains(operation.Code, StringComparison.Ordinal), "route operation " + operation.Code);
+            var rawHeader = Array.FindIndex(rows, row => row.Length > 0 && row[0] == "М02");
+            Check(rawHeader >= 0 && rawHeader + 1 < rows.Length, "route raw-stock profile row exists");
+            var rawProfile = rows[rawHeader + 1][8];
+            var rawLength = Regex.Match(rawProfile, @"×\s*([0-9]+(?:,[0-9]+)?)");
+            Check(rawLength.Success, "route raw-stock length is readable");
+            Near(p.Calculations.RawStockLength, FormNumber(rawLength.Groups[1].Value));
             var equipmentHeader = rows.First(row => row.Length > 1 && row[0] == "Б" && row.Any(cell => NormLabel(cell) == "Тпз"));
             var timeColumns = equipmentHeader.Select((cell, index) => (Label: NormLabel(cell), Index: index))
                 .Where(cell => cell.Label is "Тпз" or "Тшт").Select(cell => cell.Index).ToArray();
@@ -1094,6 +1352,10 @@ internal static class Program
                 foreach (var column in timeColumns) Check(column < row.Length && string.IsNullOrWhiteSpace(row[column]), "route time standards remain blank");
             return;
         }
+        var preparedStock = rows.Single(row => row.Length == 8 && row[0] == "Токарная с ЧПУ");
+        var preparedLength = Regex.Match(preparedStock[5], @"×\s*([0-9]+(?:,[0-9]+)?)");
+        Check(preparedLength.Success, "operation prepared-stock length is readable");
+        Near(p.Calculations.StockLength, FormNumber(preparedLength.Groups[1].Value));
         Check(Regex.IsMatch(text, @"Форма\s*3\b", RegexOptions.IgnoreCase), "operation form 3 designation");
         Check(Regex.IsMatch(text, @"Форма\s*2[аa]\b", RegexOptions.IgnoreCase), "operation continuation form 2a designation");
         foreach (var marker in new[] { "О", "Т", "Р" })
@@ -1119,10 +1381,11 @@ internal static class Program
         {
             var row = regimeRows.Single(row => Regex.IsMatch(row[1], @"(?<!\d)" + Regex.Escape(t.Id) + @"(?!\d)"));
             Equal(10, row.Length, "operation regime fields");
+            Check(row.Skip(2).All(cell => !Regex.IsMatch(cell, @"\d\.\d")), "Russian operation-card numeric fields use a decimal comma");
             Near(double.Parse(t.Tool[1..], CultureInfo.InvariantCulture), FormNumber(row[2]));
             Near(t.ReferenceDiameter, FormNumber(row[3]), .000501);
             Near(Math.Abs(t.ZEnd - t.ZStart), FormNumber(row[4]), .000501);
-            Near(t.Depth, FormNumber(row[5]), .000501);
+            Near(IndependentMaximumDepth(t), FormNumber(row[5]));
             Near(t.Passes.Count, FormNumber(row[6]));
             Near(t.Feed, FormNumber(row[7]), .000501);
             Near(t.Rpm, FormNumber(row[8]));

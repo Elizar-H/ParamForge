@@ -16,6 +16,8 @@ public record Parameters
     public double StockBore { get; init; } = 45;
     public double TrimAllowance { get; init; } = 2;
     public double GripLength { get; init; } = 25;
+    public double ChuckClearance { get; init; } = 10;
+    public double FrontFacingAllowance { get; init; } = 2;
     public double DepthOutside { get; init; } = 2;
     public double DepthInside { get; init; } = 1;
     public double FinishAllowance { get; init; } = 0.2;
@@ -44,7 +46,11 @@ public record ValidationError(string Field, string Message);
 public record GenerationResult(bool Ok, List<ValidationError> Errors, List<string> Warnings, Project? Project);
 public record Calculations(double StockLength, double CutLength, double ClearOut, double ClearIn, double TotalCutMinutes,
     double TargetBoreDiameter = 0, double TargetCounterboreDiameter = 0, double TargetFlangeDiameter = 0,
-    double TargetLength = 0, double TargetCounterboreDepth = 0);
+    double TargetLength = 0, double TargetCounterboreDepth = 0,
+    double CutoffWidth = 3, double PartingFrontZ = 0, double PartingBackZ = 0,
+    double JawsFrontZ = 0, double RawStockLength = 0,
+    double SecondClampStart = 0, double SecondClampEnd = 0,
+    double SoftJawPocketDiameter = 0, double SoftJawPocketDepth = 0);
 public record Operation(string Code, string Title, string Kind, string Description);
 public record Transition
 {
@@ -59,6 +65,22 @@ public record Transition
     public double Depth { get; init; }
     public double ReferenceDiameter { get; init; }
     public List<double> Passes { get; init; } = [];
+    /// <summary>Фактический наибольший радиальный съём по округлённым диаметрам проходов.</summary>
+    public double ActualMaximumDepth
+    {
+        get
+        {
+            var previous = (decimal)StartDiameter;
+            decimal maximum = 0;
+            foreach (var diameter in Passes)
+            {
+                var current = (decimal)diameter;
+                maximum = Math.Max(maximum, Math.Abs(current - previous) / 2m);
+                previous = current;
+            }
+            return (double)Math.Round(maximum, 4, MidpointRounding.AwayFromZero);
+        }
+    }
     public double ZStart { get; init; }
     public double ZEnd { get; init; }
     public double CutMinutes { get; set; }

@@ -23,7 +23,8 @@ internal static class NativeDocxCards
     private const double RouteBodyMm = 326 * 25.4 / 1440;
     private const double FirstOperationBodyMm = 327 * 25.4 / 1440;
     private const double ContinuedOperationBodyMm = 346 * 25.4 / 1440;
-    private static string F(double n) => n == 0 ? "0" : Engine.Fmt(n);
+    private static string F(double n) => n == 0 ? "0" : Engine.Round(n).ToString("0.###", CultureInfo.GetCultureInfo("ru-RU"));
+    private static string Depth(double n) => n.ToString("0.####", CultureInfo.GetCultureInfo("ru-RU"));
     private static string Sign(double n) => (n > 0 ? "+" : "") + F(n);
     private static string Mark(ref int n, string prefix = "") => prefix + (n++).ToString("D2", CultureInfo.InvariantCulture);
     private static int Mm(double n) => (int)Math.Round(n * 1440 / 25.4);
@@ -125,25 +126,50 @@ internal static class NativeDocxCards
     private static string Nominals(Parameters p) => $"Номиналы и отклонения (ниж./верх.), мм: d {F(p.BoreDiameter)} ({Sign(p.BoreLowerDeviation)}/{Sign(p.BoreUpperDeviation)}); d2 {F(p.CounterboreDiameter)} ({Sign(p.CounterboreLowerDeviation)}/{Sign(p.CounterboreUpperDeviation)}); D {F(p.FlangeDiameter)} ({Sign(p.FlangeLowerDeviation)}/{Sign(p.FlangeUpperDeviation)}); L {F(p.Length)} ({Sign(p.LengthLowerDeviation)}/{Sign(p.LengthUpperDeviation)}); h {F(p.CounterboreDepth)} ({Sign(p.CounterboreDepthLowerDeviation)}/{Sign(p.CounterboreDepthUpperDeviation)}).";
     private static string Targets(Calculations c) => $"Расчётные цели, мм: d {F(c.TargetBoreDiameter)}; d2 {F(c.TargetCounterboreDiameter)}; D {F(c.TargetFlangeDiameter)}; L {F(c.TargetLength)}; h {F(c.TargetCounterboreDepth)}. Цели — середины полей допуска.";
 
+    private static string GeneralAcceptance(Parameters p)
+    {
+        var db = ToolingProfile.GeneralLinearTolerance(p.BodyDiameter);
+        var width = ToolingProfile.GeneralLinearTolerance(p.FlangeWidth);
+        return $"Db {F(p.BodyDiameter)} ±{F(db)}; b {F(p.FlangeWidth)} ±{F(width)} мм ({ToolingProfile.GeneralToleranceDesignation}); галтели R≤{F(ToolingProfile.MaximumCornerRadius)} мм.";
+    }
+
+    private static string InspectionTools(Parameters p)
+    {
+        var low = p.FlangeDiameter + p.FlangeLowerDeviation;
+        var high = p.FlangeDiameter + p.FlangeUpperDeviation;
+        var first = (int)Math.Floor(low / 25) * 25;
+        var last = Math.Max(first, ((int)Math.Ceiling(high / 25) - 1) * 25);
+        var micrometers = string.Join(" / ", Enumerable.Range(0, (last - first) / 25 + 1).Select(i => $"{first + i * 25}–{first + (i + 1) * 25}"));
+        var boreRanges = new List<string>();
+        foreach (var (minimum, maximum) in new[] { (18D, 50D), (50D, 100D), (100D, 160D), (160D, 250D) })
+            if (new[] { (p.BoreDiameter + p.BoreLowerDeviation, p.BoreDiameter + p.BoreUpperDeviation),
+                (p.CounterboreDiameter + p.CounterboreLowerDeviation, p.CounterboreDiameter + p.CounterboreUpperDeviation) }
+                .Any(range => range.Item1 < maximum && range.Item2 > minimum || range.Item1 == range.Item2 && range.Item1 >= minimum && range.Item1 <= maximum))
+                boreRanges.Add($"{F(minimum)}–{F(maximum)}");
+        var caliperMaximum = Math.Max(p.Length + p.LengthUpperDeviation, p.BodyDiameter + ToolingProfile.GeneralLinearTolerance(p.BodyDiameter));
+        var caliper = caliperMaximum <= 150 ? 150 : caliperMaximum <= 200 ? 200 : 300;
+        return $"Микрометр {micrometers}; нутромеры {string.Join(" / ", boreRanges)}; штангенциркуль 0–{caliper}; глубиномер 0–150.";
+    }
+
     internal static byte[] Route(Project project)
     {
         var p = project.Params; var c = project.Calculations;
         var body = Top("ГОСТ 3.1118-82", "1").ToList(); var card = Table(); Ribbon(card, 1, 1); Address(card, project);
-        TextRow(card, "М01", "Цилиндрическая заготовка с отверстием / " + p.Material, 6);
+        TextRow(card, "М01", "Полый обработанный полуфабрикат / " + p.Material + "; ОТ, HB≤197", 6);
         int[] widths = [12, 30, 12, 12, 12, 20, 15, 30, 80, 18, 31];
         string[] labels = ["М02", "Код", "ЕВ", "МД", "ЕН", "Н. расх.", "КИМ", "Код загот.", "Профиль и размеры", "КД", "МЗ"];
         Row(card, 4, widths.Select((w, i) => new Cell(w, labels[i], true, Font: 14)), true);
-        Row(card, 6, widths.Select((w, i) => new Cell(w, i == 8 ? $"Ø{F(p.StockDiameter)} / Ø{F(p.StockBore)} × {F(c.StockLength)} мм" : "", true)), true);
+        Row(card, 6, widths.Select((w, i) => new Cell(w, i == 8 ? $"Ø{F(p.StockDiameter)} / Ø{F(p.StockBore)} × {F(c.RawStockLength)} мм" : "", true)), true);
         int[] aw = [12, 8, 8, 9, 12, 97, 126]; string[] ah = ["А", "Цех", "Уч.", "РМ", "Опер.", "Код, наименование операции", "Обозначение документа"];
         Row(card, 4, aw.Select((w, i) => new Cell(w, ah[i], true, Font: 14)), true);
         int[] bw = [12, 108, 30, 14, 8, 8, 8, 10, 8, 8, 15, 21, 22]; string[] bh = ["Б", "Код, наименование оборудования", "СМ", "Проф.", "Р", "УТ", "КР", "КОИД", "ЕН", "ОП", "Кшт.", "Тпз", "Тшт."];
         Row(card, 4, bw.Select((w, i) => new Cell(w, bh[i], true, Font: 14)), true);
         var texts = new Dictionary<string, string>
         {
-            ["005"] = $"Подготовить правый торец и сквозное отверстие Ø{F(p.StockBore)}. Заготовка Ø{F(p.StockDiameter)}/Ø{F(p.StockBore)} × {F(c.StockLength)} мм. Вне УП.",
-            ["010"] = "Точить буртик и тело; расточить основное отверстие и ступень. Восемь переходов 010.01–010.08; X — диаметр.",
-            ["020"] = $"Отделить с припуском {F(p.TrimAllowance)} мм; довести задний торец до Lц {F(c.TargetLength)} мм, снять заусенцы. Вне УП.",
-            ["030"] = $"Контролировать L, D, d, d2, h по заданным полям допуска. Проверить Db {F(p.BodyDiameter)} и b {F(p.FlangeWidth)} мм. Вне УП."
+            ["005"] = $"Принять полый полуфабрикат Ø{F(p.StockDiameter)}/Ø{F(p.StockBore)} × {F(c.RawStockLength)}; подрезать первый торец на {F(p.FrontFacingAllowance)} до {F(c.StockLength)} мм.",
+            ["010"] = $"Зажим {F(p.GripLength)} мм; кулачки Z{F(c.JawsFrontZ)}; обработка до Z{F(c.PartingFrontZ)}. Точить буртик, тело и отверстия; непрерывная СОЖ. УП 010.",
+            ["020"] = $"Отрезать в полосе Z{F(c.PartingFrontZ)}…{F(c.PartingBackZ)} мм (рез {F(c.CutoffWidth)} мм); коридор до кулачков {F(p.ChuckClearance)} мм. Вне УП.",
+            ["030"] = "Контролировать размеры по указанным отклонениям; h — от первого торца на плоской части уступа вне галтели."
         };
         var n = 3;
         foreach (var op in project.Operations)
@@ -152,14 +178,20 @@ internal static class NativeDocxCards
             var av = new[] { Mark(ref n, "А"), "", "", "", op.Code, name, op.Code == "010" ? "ОК 010; УП " + project.Id : "" };
             Row(card, RouteBodyMm, aw.Select((w, i) => new Cell(w, av[i], i is 0 or 4)));
             var bv = new string[bw.Length]; Array.Fill(bv, ""); bv[0] = Mark(ref n, "Б");
+            bv[1] = op.Code switch { "010" => "Токарный с ЧПУ AxiOMA Control", "005" or "020" => "Токарный, наладочный режим", _ => "Контрольное место" };
             Row(card, RouteBodyMm, bw.Select((w, i) => new Cell(w, bv[i], i == 0)));
             TextRow(card, Mark(ref n, "О"), texts.GetValueOrDefault(op.Code, op.Description));
-            if (op.Code == "010") TextRow(card, Mark(ref n, "Т"), "T1 D1 — наружный резец; T2 D1 — расточной резец.");
+            if (op.Code == "010") TextRow(card, Mark(ref n, "Т"), $"T1/D1 {ToolingProfile.ExternalTool}; T2/D1 {ToolingProfile.BoringTool}; {ToolingProfile.Insert}, R{F(ToolingProfile.NoseRadius)}.");
+            if (op.Code == "020")
+            {
+                TextRow(card, Mark(ref n, "О"), $"ПФ-01: Ø{F(p.BodyDiameter)}, пояс {F(c.SecondClampStart)}…{F(c.SecondClampEnd)} от первого торца; упор первым торцом. Подрезать до L{F(c.TargetLength)} мм; снять заусенцы.");
+                TextRow(card, Mark(ref n, "Т"), $"{ToolingProfile.CutoffTool} / {ToolingProfile.CutoffInsert}; ПФ-02; карман ПФ-01 Ø{F(c.SoftJawPocketDiameter)} × {F(c.SoftJawPocketDepth)} мм.");
+            }
+            if (op.Code == "030") TextRow(card, Mark(ref n, "Т"), InspectionTools(p));
         }
-        TextRow(card, Mark(ref n, "О"), Nominals(p)); TextRow(card, Mark(ref n, "О"), Targets(c));
-        TextRow(card, Mark(ref n, "О"), "");
-        TextRow(card, Mark(ref n), "");
-        TextRow(card, Mark(ref n), ""); TextRow(card, Mark(ref n), "");
+        TextRow(card, Mark(ref n, "О"), Nominals(p));
+        TextRow(card, Mark(ref n, "О"), GeneralAcceptance(p));
+        TextRow(card, Mark(ref n, "О"), Targets(c));
         Bottom(card, "МК", "Маршрутная карта", 1); body.Add(card);
         return Package(project, "Маршрутная карта", body);
     }
@@ -174,11 +206,11 @@ internal static class NativeDocxCards
             int[] widths = [75, 60, 30, 14, 18, 47, 14, 14]; string[] labels = ["Наименование операции", "Материал", "Твердость", "ЕВ", "МД", "Профиль и размеры", "МЗ", "КОИД"];
             Row(t, 4, widths.Select((w, i) => new Cell(w, labels[i], true, Font: 14)), true);
             var p = project.Params; var c = project.Calculations;
-            var values = new[] { "Токарная с ЧПУ", p.Material, "", "", "", $"Ø{F(p.StockDiameter)}/Ø{F(p.StockBore)} × {F(c.StockLength)}", "", "" };
+            var values = new[] { "Токарная с ЧПУ", p.Material, "≤197 HB", "", "", $"Ø{F(p.StockDiameter)}/Ø{F(p.StockBore)} × {F(c.StockLength)}", "", "" };
             Row(t, 8, widths.Select((w, i) => new Cell(w, values[i], true)), true);
             widths = [75, 60, 18, 18, 18, 18, 65]; labels = ["Оборудование, устройство ЧПУ", "Обозначение программы", "То", "Тв", "Тпз", "Тшт.", "СОЖ"];
             Row(t, 4, widths.Select((w, i) => new Cell(w, labels[i], true, Font: 14)), true);
-            values = ["ЧПУ AxiOMA Control", project.Id, "", "", "", "", ""];
+            values = ["ЧПУ AxiOMA Control", project.Id, "", "", "", "", "Эмульсия, непрерывно (M8)"];
             Row(t, 10, widths.Select((w, i) => new Cell(w, values[i], true)), true);
         }
         string[] rh = ["Р", "", "ПИ", "D или B", "L", "t", "i", "S", "n", "V"];
@@ -187,9 +219,9 @@ internal static class NativeDocxCards
     private static void TransitionRows(XElement card, Transition t, ref int n, double height)
     {
         TextRow(card, Mark(ref n, "О"), $"{t.Id} {t.Title}. Ø{F(t.StartDiameter)} → Ø{F(t.Diameter)}; Z {F(t.ZStart)} → {F(t.ZEnd)} мм.", height);
-        TextRow(card, Mark(ref n, "Т"), t.Tool + " D1" + (t.Tool == "T1" ? " — наружный резец." : " — расточной резец."), height);
+        TextRow(card, Mark(ref n, "Т"), t.Tool + " D1 — " + (t.Tool == "T1" ? ToolingProfile.ExternalTool : ToolingProfile.BoringTool) + "; " + ToolingProfile.Insert + ", R" + F(ToolingProfile.NoseRadius) + ".", height);
         var values = new[] { Mark(ref n, "Р"), t.Id, t.Tool.TrimStart('T'),
-            F(t.ReferenceDiameter), F(Math.Abs(t.ZEnd - t.ZStart)), F(t.Depth), t.Passes.Count.ToString(CultureInfo.InvariantCulture),
+            F(t.ReferenceDiameter), F(Math.Abs(t.ZEnd - t.ZStart)), Depth(t.ActualMaximumDepth), t.Passes.Count.ToString(CultureInfo.InvariantCulture),
             F(t.Feed), F(t.Rpm), F(Math.PI * t.ReferenceDiameter * t.Rpm / 1000) };
         Row(card, height, RegimeWidths.Select((w, i) => new Cell(w, values[i], i != 1)));
     }
@@ -197,19 +229,23 @@ internal static class NativeDocxCards
     {
         var p = project.Params; var c = project.Calculations;
         var body = Top("ГОСТ 3.1404-86", "3").ToList(); var first = Table(); OperationHeader(first, project, false); var n = 1;
-        TextRow(first, Mark(ref n, "О"), $"Установить заготовку за хвостовик {F(p.GripLength)} мм; длина обработки {F(c.CutLength)} мм.", FirstOperationBodyMm);
-        TextRow(first, Mark(ref n, "О"), "База расчёта: Z0 — подготовленный правый торец; Z− — к зажиму; X — диаметр.", FirstOperationBodyMm);
+        TextRow(first, Mark(ref n, "О"), $"Заготовка {F(c.StockLength)} мм; зажим {F(p.GripLength)} мм, кулачки Z{F(c.JawsFrontZ)}; длина обработки {F(c.CutLength)} мм.", FirstOperationBodyMm);
+        TextRow(first, Mark(ref n, "О"), "Z0 — первый подготовленный торец; Z− — к зажиму; X — диаметр. T/D привязаны к виртуальной вершине касательных X/Z.", FirstOperationBodyMm);
         foreach (var t in project.Transitions.Take(4)) TransitionRows(first, t, ref n, FirstOperationBodyMm);
-        TextRow(first, Mark(ref n, "О"), "", FirstOperationBodyMm);
-        TextRow(first, Mark(ref n), "", FirstOperationBodyMm); TextRow(first, Mark(ref n), "", FirstOperationBodyMm); TextRow(first, Mark(ref n), "", FirstOperationBodyMm);
+        TextRow(first, Mark(ref n, "О"), $"T2: BD{F(ToolingProfile.BoringBarDiameter)}, DMIN{F(ToolingProfile.BoringMinimumDiameter)}, вылет {F(ToolingProfile.BoringOverhang)} мм; зажим оправки {F(ToolingProfile.BoringClampLength)} мм.", FirstOperationBodyMm);
+        TextRow(first, Mark(ref n, "О"), $"Перед держателем T2 при полном ходе остаётся {F(ToolingProfile.BoringOverhang - c.CutLength)} мм. Отвод X{F(c.ClearIn)}; галтели R≤{F(ToolingProfile.MaximumCornerRadius)} мм.", FirstOperationBodyMm);
+        TextRow(first, Mark(ref n, "О"), $"Рез {F(c.CutoffWidth)} мм и коридор {F(p.ChuckClearance)} мм: задний габарит блока ≤{F(ToolingProfile.CutoffHolderAxialProjection)}, остаточный запас ≥{F(p.ChuckClearance - ToolingProfile.CutoffHolderAxialProjection)} мм.", FirstOperationBodyMm);
+        TextRow(first, Mark(ref n), "", FirstOperationBodyMm);
         Bottom(first, "ОК", "Операционная карта", 1); body.Add(first);
         // Продолжение формы 3 — форма 2а, а не 3а: ТПУ, с. 119–120.
         body.AddRange(Top("ГОСТ 3.1404-86", "2а", true)); var second = Table(); OperationHeader(second, project, true);
         foreach (var t in project.Transitions.Skip(4)) TransitionRows(second, t, ref n, ContinuedOperationBodyMm);
-        TextRow(second, Mark(ref n, "О"), Nominals(p), ContinuedOperationBodyMm); TextRow(second, Mark(ref n, "О"), Targets(c), ContinuedOperationBodyMm);
-        TextRow(second, Mark(ref n, "О"), "В строках Р: D — опорный диаметр; t — максимальная радиальная глубина, i — число проходов; S — мм/об, n — об/мин, V — м/мин.", ContinuedOperationBodyMm);
-        TextRow(second, Mark(ref n, "О"), "Операции 005, 020 и 030 — вне УП. Контроль размеров — по маршрутной карте.", ContinuedOperationBodyMm);
-        for (var i = 0; i < 6; i++) TextRow(second, Mark(ref n), "", ContinuedOperationBodyMm);
+        TextRow(second, Mark(ref n, "О"), Nominals(p), ContinuedOperationBodyMm);
+        TextRow(second, Mark(ref n, "О"), GeneralAcceptance(p), ContinuedOperationBodyMm);
+        TextRow(second, Mark(ref n, "О"), Targets(c), ContinuedOperationBodyMm);
+        TextRow(second, Mark(ref n, "О"), "В строках Р: D — опорный диаметр; t — фактический максимальный радиальный съём; S — мм/об, n — об/мин, V — м/мин.", ContinuedOperationBodyMm);
+        TextRow(second, Mark(ref n, "О"), "005, 020 и 030 — вне этой УП. Получение готовой детали — по маршрутной карте; контроль h от первого торца вне галтели.", ContinuedOperationBodyMm);
+        for (var i = 0; i < 5; i++) TextRow(second, Mark(ref n), "", ContinuedOperationBodyMm);
         Bottom(second, "ОК", "Операционная карта", 2); body.Add(second);
         return Package(project, "Операционная карта операции 010", body);
     }
@@ -268,7 +304,7 @@ internal static class NativeDocxCards
         var rootRels = new XDocument(new XElement(Rel + "Relationships", Link("rId1", R.NamespaceName + "/officeDocument", "word/document.xml"), Link("rId2", "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties", "docProps/core.xml")));
         var docRels = new XDocument(new XElement(Rel + "Relationships", Link("rId1", R.NamespaceName + "/styles", "styles.xml")));
         XNamespace cp = "http://schemas.openxmlformats.org/package/2006/metadata/core-properties", dc = "http://purl.org/dc/elements/1.1/";
-        var props = new XDocument(new XElement(cp + "coreProperties", new XAttribute(XNamespace.Xmlns + "dc", dc), new XElement(dc + "title", title), new XElement(dc + "creator", "Контур"), new XElement(dc + "description", "Технологическая документация. Ревизия " + project.Id)));
+        var props = new XDocument(new XElement(cp + "coreProperties", new XAttribute(XNamespace.Xmlns + "dc", dc), new XElement(dc + "title", title), new XElement(dc + "creator", "ParamForge"), new XElement(dc + "description", "Технологическая документация. Ревизия " + project.Id)));
         using var memory = new MemoryStream();
         using (var zip = new ZipArchive(memory, ZipArchiveMode.Create, true))
         {
