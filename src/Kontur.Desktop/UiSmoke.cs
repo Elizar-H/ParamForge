@@ -26,6 +26,7 @@ internal static class UiSmoke
             Check("seventeen_main_numeric_inputs", form.MainNumericInputCount == 17, form.MainNumericInputCount);
             Check("default_generation", form.CurrentProject?.Verification.Ok == true && !form.IsStale);
             form.CaptureForm(Path.Combine(folder, "01-default-1280x850.png"));
+            CheckCaptions(form, "default", Check);
             Check("default_labels_and_closed_walls", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreDimensionsClearOfMaterial && form.DrawingLabelsClearOfRearEdges);
 
             form.SetInput("length", "132");
@@ -95,6 +96,7 @@ internal static class UiSmoke
             form.GenerateNow();
             form.Size = new Size(1100, 720);
             form.CaptureForm(Path.Combine(folder, "05-minimum-1100x720.png"));
+            CheckCaptions(form, "minimum", Check);
             Check("minimum_drawing", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreDimensionsClearOfMaterial && form.DrawingLabelsClearOfRearEdges, new { form.Width, form.Height });
             form.ClientSize = new Size(1280, 850);
 
@@ -138,6 +140,7 @@ internal static class UiSmoke
             EditByCanvasClick(form, "boreDiameter", editor =>
             {
                 editor.NominalInput.Text = "48"; editor.LowerInput!.Text = "-0,1"; editor.UpperInput!.Text = "0,5";
+                CheckButtonPair("dimension_editor", editor.ApplyButton, editor.CancelEditorButton, Check);
                 CaptureDialog(editor, Path.Combine(folder, "11-dimension-editor.png"));
                 PressDialogKey(editor, Keys.Enter);
             });
@@ -222,6 +225,8 @@ internal static class UiSmoke
             var originalPartName = form.CurrentProject!.Params.PartName;
             var processingTitle = CancelOwnModal(form, () => InvokeAction(form, "OpenProcessing"), dialog =>
             {
+                var pair = Descendants(dialog).OfType<Button>().ToArray();
+                CheckButtonPair("processing", pair.Single(button => button.Text == "Применить"), pair.Single(button => button.Text == "Отмена"), Check);
                 var partName = Descendants(dialog).OfType<TextBox>().First(box => box.Text == originalPartName);
                 partName.Text = "Discarded QA edit";
             });
@@ -287,6 +292,39 @@ internal static class UiSmoke
         Environment.ExitCode = failures.Count == 0 ? 0 : 1;
     }
 
+
+    private static void CheckCaptions(MainForm form, string name, Action<string, bool, object?> check)
+    {
+        var labels = Descendants(form).OfType<Label>().Where(label => label.Name.StartsWith("dimension_caption_", StringComparison.Ordinal)).ToArray();
+        var expected = new Dictionary<string, string>
+        {
+            ["length"] = "Длина", ["flangeDiameter"] = "Диаметр бурта", ["boreDiameter"] = "Диаметр отверстия",
+            ["counterboreDiameter"] = "Диаметр расточки", ["counterboreDepth"] = "Глубина расточки"
+        };
+        var evidence = labels.Select(label => new
+        {
+            key = label.Name["dimension_caption_".Length..], text = label.Text.Replace('\n', ' '),
+            availableWidth = label.ClientSize.Width, availableHeight = label.ClientSize.Height,
+            measuredWidth = label.Text.Split('\n').Max(line => TextRenderer.MeasureText(line, label.Font).Width),
+            measuredHeight = TextRenderer.MeasureText(label.Text, label.Font).Height
+        }).ToArray();
+        check(name + "_full_dimension_captions_fit", evidence.Length == 5 && evidence.All(item =>
+            expected.GetValueOrDefault(item.key) == item.text && item.measuredWidth <= item.availableWidth && item.measuredHeight <= item.availableHeight), evidence);
+    }
+    private static void CheckButtonPair(string name, Button first, Button second, Action<string, bool, object?> check)
+    {
+        check(name + "_buttons_align", first.Top == second.Top && first.Size == second.Size && first.Font.Equals(second.Font) &&
+            first.Padding == second.Padding && first.Margin == second.Margin && first.TextAlign == second.TextAlign &&
+            first.FlatStyle == second.FlatStyle && first.FlatAppearance.BorderSize == second.FlatAppearance.BorderSize &&
+            first.UseCompatibleTextRendering == second.UseCompatibleTextRendering,
+            new { first = ButtonEvidence(first), second = ButtonEvidence(second) });
+    }
+    private static object ButtonEvidence(Button button) => new
+    {
+        button.Text, button.Left, button.Top, button.Width, button.Height, font = button.Font.ToString(),
+        padding = button.Padding.ToString(), margin = button.Margin.ToString(), textAlign = button.TextAlign.ToString(),
+        borderWidth = button.FlatAppearance.BorderSize, borderColor = button.FlatAppearance.BorderColor.ToString()
+    };
 
     private static void RenderDrawing(MainForm form)
     {

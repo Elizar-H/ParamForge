@@ -14,11 +14,12 @@ internal static class Theme
 
     internal static Button Button(string text, bool primary = false) => new()
     {
-        Text = text, Font = primary ? Strong : Body, AutoEllipsis = true,
-        FlatStyle = FlatStyle.Flat, BackColor = primary ? Accent : Color.White,
+        Text = text, Font = Body, AutoEllipsis = true,
+        FlatStyle = FlatStyle.Flat, FlatAppearance = { BorderColor = primary ? Accent : Border, BorderSize = 1 },
+        BackColor = primary ? Accent : Color.White,
         ForeColor = primary ? Color.White : Ink, UseVisualStyleBackColor = false,
-        Height = primary ? 48 : 36, Padding = new Padding(7, 1, 7, 1),
-        Cursor = Cursors.Hand, Margin = new Padding(0, 4, 0, 4)
+        Height = 36, Padding = new Padding(7, 0, 7, 0), TextAlign = ContentAlignment.MiddleCenter,
+        Cursor = Cursors.Hand, Margin = new Padding(4, 4, 4, 4)
     };
 
     internal static Label Label(string text, Font? font = null) => new()

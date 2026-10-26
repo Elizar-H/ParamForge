@@ -123,8 +123,8 @@ internal sealed class MainForm : Form
     private Control BuildDimensions()
     {
         var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 6, Margin = Padding.Empty };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 27));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22.5F));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22.5F));
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 29));
@@ -138,16 +138,18 @@ internal sealed class MainForm : Form
         }
         var rows = new[]
         {
-            ("L · длина", "length", "lengthLowerDeviation", "lengthUpperDeviation"),
-            ("D · бурт.", "flangeDiameter", "flangeLowerDeviation", "flangeUpperDeviation"),
-            ("d · отв.", "boreDiameter", "boreLowerDeviation", "boreUpperDeviation"),
-            ("d2 · раст.", "counterboreDiameter", "counterboreLowerDeviation", "counterboreUpperDeviation"),
-            ("h · глуб.", "counterboreDepth", "counterboreDepthLowerDeviation", "counterboreDepthUpperDeviation")
+            ("Длина", "length", "lengthLowerDeviation", "lengthUpperDeviation"),
+            ("Диаметр\nбурта", "flangeDiameter", "flangeLowerDeviation", "flangeUpperDeviation"),
+            ("Диаметр\nотверстия", "boreDiameter", "boreLowerDeviation", "boreUpperDeviation"),
+            ("Диаметр\nрасточки", "counterboreDiameter", "counterboreLowerDeviation", "counterboreUpperDeviation"),
+            ("Глубина\nрасточки", "counterboreDepth", "counterboreDepthLowerDeviation", "counterboreDepthUpperDeviation")
         };
         for (var row = 0; row < rows.Length; row++)
         {
             var (caption, nominal, low, high) = rows[row];
-            table.Controls.Add(Theme.Label(caption, Theme.Small), 0, row + 1);
+            var label = Theme.Label(caption, Theme.Small);
+            label.Name = "dimension_caption_" + nominal;
+            table.Controls.Add(label, 0, row + 1);
             table.Controls.Add(Input(nominal), 1, row + 1);
             table.Controls.Add(Input(low), 2, row + 1);
             table.Controls.Add(Input(high), 3, row + 1);
@@ -471,8 +473,8 @@ internal sealed class MainForm : Form
             BackColor = Color.White;
             errors.ContainerControl = this;
             var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(12, 5, 12, 5) };
-            var cancel = Theme.Button("Отмена"); cancel.Width = 115; cancel.DialogResult = DialogResult.Cancel;
-            var apply = Theme.Button("Применить", true); apply.Width = 150; apply.Height = 38;
+            var cancel = Theme.Button("Отмена"); cancel.Width = 140; cancel.DialogResult = DialogResult.Cancel;
+            var apply = Theme.Button("Применить", true); apply.Width = 140;
             apply.Click += (_, _) => Apply();
             footer.Controls.AddRange([cancel, apply]);
             Controls.Add(footer);
