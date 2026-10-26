@@ -10,7 +10,7 @@ internal static class HtmlCards
     private static string F(double value) => Engine.Fmt(value);
     private static string Signed(double value) => (value > 0 ? "+" : "") + F(value);
     private static string Document(string title, string body) => "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>" + Esc(title) + "</title><style>" + Style + "</style></head><body>" + body + "</body></html>";
-    private static string Header(Project p, string title) => $"<h1>{Esc(title)}</h1><p><strong>{Esc(p.Params.PartName)}</strong> · {Esc(p.Id)} · версия генератора {Esc(p.Version)}</p><p>Материал: {Esc(p.Params.Material)}. Профиль: LinuxCNC 2.9; X — диаметр; мм; Z0 — правый торец.</p><div class=\"warning\">Учебный комплект. Форма не заявлена как полное соответствие ЕСТД. УП не проверена на станке; оснастка, инструмент и достижимость точности требуют уточнения.</div>";
+    private static string Header(Project p, string title) => $"<h1>{Esc(title)}</h1><p><strong>{Esc(p.Params.PartName)}</strong> · {Esc(p.Id)} · версия генератора {Esc(p.Version)}</p><p>Материал: {Esc(p.Params.Material)}. X — диаметр; мм; Z0 — правый торец.</p>";
 
     private static IEnumerable<(string Name, double Nominal, double Lower, double Upper, double Target)> Dimensions(Parameters p, Calculations c)
     {
@@ -28,30 +28,29 @@ internal static class HtmlCards
     {
         var rows = string.Concat(Dimensions(project.Params, project.Calculations).Select(d =>
             $"<tr><td>{Esc(d.Name)}</td><td>{F(d.Nominal)}</td><td>{Signed(d.Lower)} / {Signed(d.Upper)}</td><td>{F(d.Nominal + d.Lower)} … {F(d.Nominal + d.Upper)}</td><td>{F(d.Target)}</td></tr>"));
-        return "<h2>Номиналы, допуски и расчётные цели</h2><p>Все размеры в мм. Цель — середина поля допуска с округлением до 0,001 мм. Это принятое проектное решение; фактическая точность обработки не гарантируется.</p><table><thead><tr><th>Размер</th><th>Номинал</th><th>Нижнее / верхнее отклонения</th><th>Границы</th><th>Расчётная цель</th></tr></thead><tbody>" + rows + "</tbody></table>";
+        return "<h2>Номиналы, допуски и расчётные цели</h2><p>Все размеры в мм. Цель — середина поля допуска с округлением до 0,001 мм.</p><table><thead><tr><th>Размер</th><th>Номинал</th><th>Нижнее / верхнее отклонения</th><th>Границы</th><th>Расчётная цель</th></tr></thead><tbody>" + rows + "</tbody></table>";
     }
-    private static string ParametersTable(Parameters p) => "<h2>Исходные параметры</h2><table><thead><tr><th>Параметр</th><th>Значение</th><th>Происхождение / смысл</th></tr></thead><tbody>" +
+    private static string ParametersTable(Parameters p) => "<h2>Исходные параметры</h2><table><thead><tr><th>Параметр</th><th>Значение</th><th>Назначение</th></tr></thead><tbody>" +
         string.Concat(Engine.Fields.Select(f => $"<tr><td>{Esc(f.Label)}</td><td>{F(Engine.Number(p, f.Key))} {Esc(f.Unit)}</td><td>{Esc(f.Note)}</td></tr>")) + "</tbody></table>";
-    private static string Limitations(Project project) => "<h2>Ограничения</h2><ul>" + string.Concat(project.Warnings.Select(w => "<li>" + Esc(w) + "</li>")) + "</ul>";
 
     internal static string Route(Project project)
     {
         var table = string.Concat(project.Operations.Select(o => $"<tr><td>{Esc(o.Code)}</td><td>{Esc(o.Title)}</td><td>{Esc(o.Description)}</td><td>{(o.Kind == "nc" ? "УП " + Esc(project.Id) : "Вне УП")}</td></tr>"));
         return Document("Маршрутная карта " + project.Id, Header(project, "Маршрутная карта") +
-            "<table><thead><tr><th>Операция</th><th>Наименование</th><th>Содержание и оснащение</th><th>Связь с УП</th></tr></thead><tbody>" + table + "</tbody></table>" + Tolerances(project) + Limitations(project) + ParametersTable(project.Params));
+            "<table><thead><tr><th>Операция</th><th>Наименование</th><th>Содержание и оснащение</th><th>Связь с УП</th></tr></thead><tbody>" + table + "</tbody></table>" + Tolerances(project) + ParametersTable(project.Params));
     }
     internal static string Technology(Project project)
     {
         var p = project.Params; var c = project.Calculations;
         var body = new StringBuilder(Header(project, "Технологическая карта операции 010"));
-        body.Append($"<p>Зажим за хвостовик {F(p.GripLength)} мм. Заготовка Ø{F(p.StockDiameter)}/Ø{F(p.StockBore)} × {F(c.StockLength)} мм. T1 — условный наружный резец; T2 — условный расточной резец. Модель вершины — точка, G40/G49; геометрические коррекции не рассчитываются.</p>");
+        body.Append($"<p>Зажим за хвостовик {F(p.GripLength)} мм. Заготовка Ø{F(p.StockDiameter)}/Ø{F(p.StockBore)} × {F(c.StockLength)} мм. T1 — наружный резец; T2 — расточной резец.</p>");
         body.Append(Tolerances(project));
         body.Append("<table><thead><tr><th>Переход</th><th>Содержание / Z мм</th><th>Инструмент</th><th>X проходов, диаметры мм</th><th>Число</th><th>ap мм</th><th>n об/мин</th><th>f мм/об</th><th>t G1 мин</th><th>Кадры движений</th></tr></thead><tbody>");
         foreach (var t in project.Transitions)
             body.Append($"<tr><td>{Esc(t.Id)}</td><td>{Esc(t.Title)}<br>Z {F(t.ZStart)} → {F(t.ZEnd)}</td><td>{Esc(t.Tool)}</td><td>{string.Join("; ", t.Passes.Select(F))}</td><td>{t.Passes.Count}</td><td>{F(t.Depth)}</td><td>{F(t.Rpm)}</td><td>{F(t.Feed)}</td><td>{t.CutMinutes.ToString("F3", CultureInfo.InvariantCulture)}</td><td>N{t.Blocks.First()}–N{t.Blocks.Last()}</td></tr>");
         body.Append($"</tbody></table><p>Сумма времени G1: <strong>{c.TotalCutMinutes.ToString("F3", CultureInfo.InvariantCulture)} мин</strong>. Это не штучное время и не норматив производительности.</p><h2>Операции вне УП</h2>");
         foreach (var o in project.Operations.Where(o => o.Kind == "manual")) body.Append($"<p><strong>{Esc(o.Code)} {Esc(o.Title)}</strong>: {Esc(o.Description)}</p>");
-        body.Append(Limitations(project)); body.Append(ParametersTable(p));
+        body.Append(ParametersTable(p));
         return Document("Технологическая карта " + project.Id, body.ToString());
     }
 }

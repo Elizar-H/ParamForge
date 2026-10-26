@@ -7,7 +7,7 @@ using System.Xml.Linq;
 namespace Kontur.Core;
 
 /// <summary>
-/// Редактируемые учебные формы: МК 1 по ГОСТ 3.1118-82; ОК 3 и 2а по ГОСТ 3.1404-86.
+/// Редактируемые формы: МК 1 по ГОСТ 3.1118-82; ОК 3 и 2а по ГОСТ 3.1404-86.
 /// Сетка следует образцам Дубна с. 89 и ТПУ с. 108–111, 118–120.
 /// Полное соответствие ГОСТ без измерительной проверки не заявляется.
 /// </summary>
@@ -143,7 +143,7 @@ internal static class NativeDocxCards
             ["005"] = $"Подготовить правый торец и сквозное отверстие Ø{F(p.StockBore)}. Заготовка Ø{F(p.StockDiameter)}/Ø{F(p.StockBore)} × {F(c.StockLength)} мм. Вне УП.",
             ["010"] = "Точить буртик и тело; расточить основное отверстие и ступень. Восемь переходов 010.01–010.08; X — диаметр.",
             ["020"] = $"Отделить с припуском {F(p.TrimAllowance)} мм; довести задний торец до Lц {F(c.TargetLength)} мм, снять заусенцы. Вне УП.",
-            ["030"] = $"Контролировать L, D, d, d2, h по заданным полям допуска. Db {F(p.BodyDiameter)} и b {F(p.FlangeWidth)} мм — учебные размеры. Вне УП."
+            ["030"] = $"Контролировать L, D, d, d2, h по заданным полям допуска. Проверить Db {F(p.BodyDiameter)} и b {F(p.FlangeWidth)} мм. Вне УП."
         };
         var n = 3;
         foreach (var op in project.Operations)
@@ -151,13 +151,13 @@ internal static class NativeDocxCards
             var name = op.Code switch { "005" => "Подготовка заготовки", "010" => "Токарная с ЧПУ", "020" => "Отделение и доводка", "030" => "Контроль", _ => op.Title };
             var av = new[] { Mark(ref n, "А"), "", "", "", op.Code, name, op.Code == "010" ? "ОК 010; УП " + project.Id : "" };
             Row(card, RouteBodyMm, aw.Select((w, i) => new Cell(w, av[i], i is 0 or 4)));
-            var bv = new string[bw.Length]; Array.Fill(bv, ""); bv[0] = Mark(ref n, "Б"); bv[1] = op.Code == "010" ? "Учебный профиль LinuxCNC; станок не выбран" : "";
+            var bv = new string[bw.Length]; Array.Fill(bv, ""); bv[0] = Mark(ref n, "Б");
             Row(card, RouteBodyMm, bw.Select((w, i) => new Cell(w, bv[i], i == 0)));
             TextRow(card, Mark(ref n, "О"), texts.GetValueOrDefault(op.Code, op.Description));
-            if (op.Code == "010") TextRow(card, Mark(ref n, "Т"), "T1 — условный наружный резец; T2 — условный расточной резец. Оснастка не выбрана.");
+            if (op.Code == "010") TextRow(card, Mark(ref n, "Т"), "T1 D1 — наружный резец; T2 D1 — расточной резец.");
         }
         TextRow(card, Mark(ref n, "О"), Nominals(p)); TextRow(card, Mark(ref n, "О"), Targets(c));
-        TextRow(card, Mark(ref n, "О"), "Учебный расчёт; УП 010 на станке не проверена.");
+        TextRow(card, Mark(ref n, "О"), "");
         TextRow(card, Mark(ref n), "");
         TextRow(card, Mark(ref n), ""); TextRow(card, Mark(ref n), "");
         Bottom(card, "МК", "Маршрутная карта", 1); body.Add(card);
@@ -178,7 +178,7 @@ internal static class NativeDocxCards
             Row(t, 8, widths.Select((w, i) => new Cell(w, values[i], true)), true);
             widths = [75, 60, 18, 18, 18, 18, 65]; labels = ["Оборудование, устройство ЧПУ", "Обозначение программы", "То", "Тв", "Тпз", "Тшт.", "СОЖ"];
             Row(t, 4, widths.Select((w, i) => new Cell(w, labels[i], true, Font: 14)), true);
-            values = ["Учебный профиль LinuxCNC; станок не выбран", project.Id, "", "", "", "", ""];
+            values = ["ЧПУ AxiOMA Control", project.Id, "", "", "", "", ""];
             Row(t, 10, widths.Select((w, i) => new Cell(w, values[i], true)), true);
         }
         string[] rh = ["Р", "", "ПИ", "D или B", "L", "t", "i", "S", "n", "V"];
@@ -187,7 +187,7 @@ internal static class NativeDocxCards
     private static void TransitionRows(XElement card, Transition t, ref int n, double height)
     {
         TextRow(card, Mark(ref n, "О"), $"{t.Id} {t.Title}. Ø{F(t.StartDiameter)} → Ø{F(t.Diameter)}; Z {F(t.ZStart)} → {F(t.ZEnd)} мм.", height);
-        TextRow(card, Mark(ref n, "Т"), t.Tool + (t.Tool == "T1" ? " — условный наружный резец" : " — условный расточной резец") + (t.Id == "010.01" ? "; оснастка не утверждена." : "."), height);
+        TextRow(card, Mark(ref n, "Т"), t.Tool + " D1" + (t.Tool == "T1" ? " — наружный резец." : " — расточной резец."), height);
         var values = new[] { Mark(ref n, "Р"), t.Id, t.Tool.TrimStart('T'),
             F(t.ReferenceDiameter), F(Math.Abs(t.ZEnd - t.ZStart)), F(t.Depth), t.Passes.Count.ToString(CultureInfo.InvariantCulture),
             F(t.Feed), F(t.Rpm), F(Math.PI * t.ReferenceDiameter * t.Rpm / 1000) };
@@ -200,7 +200,7 @@ internal static class NativeDocxCards
         TextRow(first, Mark(ref n, "О"), $"Установить заготовку за хвостовик {F(p.GripLength)} мм; длина обработки {F(c.CutLength)} мм.", FirstOperationBodyMm);
         TextRow(first, Mark(ref n, "О"), "База расчёта: Z0 — подготовленный правый торец; Z− — к зажиму; X — диаметр.", FirstOperationBodyMm);
         foreach (var t in project.Transitions.Take(4)) TransitionRows(first, t, ref n, FirstOperationBodyMm);
-        TextRow(first, Mark(ref n, "О"), "Учебный расчёт; УП 010 на станке не проверена.", FirstOperationBodyMm);
+        TextRow(first, Mark(ref n, "О"), "", FirstOperationBodyMm);
         TextRow(first, Mark(ref n), "", FirstOperationBodyMm); TextRow(first, Mark(ref n), "", FirstOperationBodyMm); TextRow(first, Mark(ref n), "", FirstOperationBodyMm);
         Bottom(first, "ОК", "Операционная карта", 1); body.Add(first);
         // Продолжение формы 3 — форма 2а, а не 3а: ТПУ, с. 119–120.
@@ -268,7 +268,7 @@ internal static class NativeDocxCards
         var rootRels = new XDocument(new XElement(Rel + "Relationships", Link("rId1", R.NamespaceName + "/officeDocument", "word/document.xml"), Link("rId2", "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties", "docProps/core.xml")));
         var docRels = new XDocument(new XElement(Rel + "Relationships", Link("rId1", R.NamespaceName + "/styles", "styles.xml")));
         XNamespace cp = "http://schemas.openxmlformats.org/package/2006/metadata/core-properties", dc = "http://purl.org/dc/elements/1.1/";
-        var props = new XDocument(new XElement(cp + "coreProperties", new XAttribute(XNamespace.Xmlns + "dc", dc), new XElement(dc + "title", title), new XElement(dc + "creator", "Контур"), new XElement(dc + "description", "Учебное заполнение по образцам ЕСТД. Ревизия " + project.Id)));
+        var props = new XDocument(new XElement(cp + "coreProperties", new XAttribute(XNamespace.Xmlns + "dc", dc), new XElement(dc + "title", title), new XElement(dc + "creator", "Контур"), new XElement(dc + "description", "Технологическая документация. Ревизия " + project.Id)));
         using var memory = new MemoryStream();
         using (var zip = new ZipArchive(memory, ZipArchiveMode.Create, true))
         {

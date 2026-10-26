@@ -6,43 +6,43 @@ using System.Text.Json;
 
 namespace Kontur.Core;
 
-/// <summary>Детерминированная учебная технология и согласованные карты/УП.</summary>
+/// <summary>Детерминированный расчёт обработки и согласованные карты/УП.</summary>
 public static class Engine
 {
-    public const string Version = "2.1.1";
+    public const string Version = "2.2.0";
     public static Parameters Defaults => new();
     public static IReadOnlyList<FieldDefinition> Fields { get; } = Array.AsReadOnly(new[]
     {
-        new FieldDefinition("length", "Длина L", "мм", "Геометрия", 20, 250, .1, "Номинал 116 и отклонения −1/0 подтверждены; цель — середина допуска"),
-        new("flangeDiameter", "Диаметр буртика D", "мм", "Геометрия", 30, 200, .1, "Номинал 120 и отклонения −0,87/0 подтверждены"),
-        new("bodyDiameter", "Диаметр тела Db", "мм", "Геометрия", 25, 195, .1, "100 — предложенное учебное значение; допуск не задан"),
-        new("flangeWidth", "Ширина буртика b", "мм", "Геометрия", 2, 60, .1, "12 — предложенное учебное значение; допуск не задан"),
-        new("boreDiameter", "Основное отверстие d", "мм", "Геометрия", 20, 160, .1, "Номинал 47,3 и отклонения 0/+1 подтверждены"),
-        new("counterboreDiameter", "Диаметр расточки d2", "мм", "Геометрия", 22, 180, .1, "Номинал 75 и отклонения 0/+0,74 подтверждены"),
-        new("counterboreDepth", "Глубина расточки h", "мм", "Геометрия", 1, 240, .1, "Номинал 28 и отклонения ±0,18 подтверждены"),
-        new("stockDiameter", "Наружный диаметр заготовки", "мм", "Заготовка", 32, 240, .1, "Учебная цилиндрическая заготовка с готовым исходным отверстием"),
-        new("stockBore", "Исходное отверстие заготовки", "мм", "Заготовка", 16, 155, .1, "45 — изменяемое предложение; подготовка относится к операции 005"),
-        new("trimAllowance", "Припуск заднего торца", "мм", "Заготовка", .5, 5, .1, "После УП снимается отдельно в операции 020"),
-        new("gripLength", "Длина хвостовика под зажим", "мм", "Заготовка", 15, 80, 1, "Учебный запас длины, расчёт сил закрепления не выполнен"),
-        new("depthOutside", "Глубина наружного прохода ap", "мм", "Режимы", .1, 5, .1, "Радиальная величина, не изменение диаметра"),
-        new("depthInside", "Глубина внутреннего прохода ap", "мм", "Режимы", .1, 3, .1, "Радиальная величина"),
-        new("finishAllowance", "Чистовой припуск a", "мм", "Режимы", .05, .5, .05, "На сторону, сохраняется после черновых проходов"),
-        new("cuttingSpeed", "Заданная скорость v", "м/мин", "Режимы", 10, 150, 1, "Демонстрационная настройка; материал — текстовый реквизит"),
-        new("feedRough", "Черновая подача f", "мм/об", "Режимы", .03, .5, .01, "Требуется подбор под реальный инструмент"),
-        new("feedFinish", "Чистовая подача f", "мм/об", "Режимы", .02, .3, .01, "Допуски и шероховатость расчётом не гарантируются"),
-        new("rpmMax", "Ограничение частоты n", "об/мин", "Режимы", 100, 3000, 1, "Предел учебного профиля, не паспорт станка"),
-        new("clearanceX", "Радиальный отвод", "мм", "Подходы", .5, 5, .1, "По X в коде добавляется удвоенный отвод"),
-        new("clearanceZ", "Отвод перед торцом", "мм", "Подходы", 1, 10, .1, "Z положителен вне правого торца"),
-        new("boreLowerDeviation", "d: нижнее отклонение", "мм", "Допуски", -5, 5, .01, "Граница основного отверстия"),
-        new("boreUpperDeviation", "d: верхнее отклонение", "мм", "Допуски", -5, 5, .01, "Граница основного отверстия"),
-        new("counterboreLowerDeviation", "d2: нижнее отклонение", "мм", "Допуски", -5, 5, .01, "Граница внутренней ступени"),
-        new("counterboreUpperDeviation", "d2: верхнее отклонение", "мм", "Допуски", -5, 5, .01, "Граница внутренней ступени"),
-        new("flangeLowerDeviation", "D: нижнее отклонение", "мм", "Допуски", -5, 5, .01, "Граница наружного буртика"),
-        new("flangeUpperDeviation", "D: верхнее отклонение", "мм", "Допуски", -5, 5, .01, "Граница наружного буртика"),
-        new("lengthLowerDeviation", "L: нижнее отклонение", "мм", "Допуски", -5, 5, .01, "Граница конечной длины после операции 020"),
-        new("lengthUpperDeviation", "L: верхнее отклонение", "мм", "Допуски", -5, 5, .01, "Граница конечной длины после операции 020"),
-        new("counterboreDepthLowerDeviation", "h: нижнее отклонение", "мм", "Допуски", -5, 5, .01, "Граница глубины внутренней ступени"),
-        new("counterboreDepthUpperDeviation", "h: верхнее отклонение", "мм", "Допуски", -5, 5, .01, "Граница глубины внутренней ступени")
+        new FieldDefinition("length", "Длина L", "мм", "Геометрия", 20, 250, .1, "Номинальная длина детали после доводки заднего торца"),
+        new("flangeDiameter", "Диаметр буртика D", "мм", "Геометрия", 30, 200, .1, "Номинальный наружный диаметр буртика"),
+        new("bodyDiameter", "Диаметр тела Db", "мм", "Геометрия", 25, 195, .1, "Наружный диаметр тела за буртиком"),
+        new("flangeWidth", "Ширина буртика b", "мм", "Геометрия", 2, 60, .1, "Осевой размер буртика от переднего торца"),
+        new("boreDiameter", "Основное отверстие d", "мм", "Геометрия", 20, 160, .1, "Номинальный диаметр основного сквозного отверстия"),
+        new("counterboreDiameter", "Диаметр расточки d2", "мм", "Геометрия", 22, 180, .1, "Номинальный диаметр внутренней ступени"),
+        new("counterboreDepth", "Глубина расточки h", "мм", "Геометрия", 1, 240, .1, "Глубина внутренней ступени от переднего торца"),
+        new("stockDiameter", "Наружный диаметр заготовки", "мм", "Заготовка", 32, 240, .1, "Наружный диаметр заготовки до точения"),
+        new("stockBore", "Исходное отверстие заготовки", "мм", "Заготовка", 16, 155, .1, "Диаметр сквозного отверстия до растачивания"),
+        new("trimAllowance", "Припуск заднего торца", "мм", "Заготовка", .5, 5, .1, "Припуск, снимаемый с заднего торца в операции 020"),
+        new("gripLength", "Длина хвостовика под зажим", "мм", "Заготовка", 15, 80, 1, "Дополнительная длина заготовки для закрепления"),
+        new("depthOutside", "Глубина наружного прохода ap", "мм", "Режимы", .1, 5, .1, "Максимальная радиальная глубина одного наружного прохода"),
+        new("depthInside", "Глубина внутреннего прохода ap", "мм", "Режимы", .1, 3, .1, "Максимальная радиальная глубина одного внутреннего прохода"),
+        new("finishAllowance", "Чистовой припуск a", "мм", "Режимы", .05, .5, .05, "Радиальный припуск, оставляемый перед чистовым проходом"),
+        new("cuttingSpeed", "Заданная скорость v", "м/мин", "Режимы", 10, 150, 1, "Скорость для расчёта оборотов по опорному диаметру"),
+        new("feedRough", "Черновая подача f", "мм/об", "Режимы", .03, .5, .01, "Перемещение инструмента за оборот при черновой обработке"),
+        new("feedFinish", "Чистовая подача f", "мм/об", "Режимы", .02, .3, .01, "Перемещение инструмента за оборот при чистовой обработке"),
+        new("rpmMax", "Ограничение частоты n", "об/мин", "Режимы", 100, 3000, 1, "Верхняя граница частоты вращения шпинделя"),
+        new("clearanceX", "Радиальный отвод", "мм", "Подходы", .5, 5, .1, "Радиальный отвод; в координате X учитывается удвоенная величина"),
+        new("clearanceZ", "Отвод перед торцом", "мм", "Подходы", 1, 10, .1, "Положительная координата Z исходной точки перед торцом"),
+        new("boreLowerDeviation", "d: нижнее отклонение", "мм", "Допуски", -5, 5, .01, "Отклонение от номинала d до нижней границы отверстия"),
+        new("boreUpperDeviation", "d: верхнее отклонение", "мм", "Допуски", -5, 5, .01, "Отклонение от номинала d до верхней границы отверстия"),
+        new("counterboreLowerDeviation", "d2: нижнее отклонение", "мм", "Допуски", -5, 5, .01, "Отклонение от номинала d2 до нижней границы ступени"),
+        new("counterboreUpperDeviation", "d2: верхнее отклонение", "мм", "Допуски", -5, 5, .01, "Отклонение от номинала d2 до верхней границы ступени"),
+        new("flangeLowerDeviation", "D: нижнее отклонение", "мм", "Допуски", -5, 5, .01, "Отклонение от номинала D до нижней границы буртика"),
+        new("flangeUpperDeviation", "D: верхнее отклонение", "мм", "Допуски", -5, 5, .01, "Отклонение от номинала D до верхней границы буртика"),
+        new("lengthLowerDeviation", "L: нижнее отклонение", "мм", "Допуски", -5, 5, .01, "Отклонение от номинала L до нижней границы конечной длины"),
+        new("lengthUpperDeviation", "L: верхнее отклонение", "мм", "Допуски", -5, 5, .01, "Отклонение от номинала L до верхней границы конечной длины"),
+        new("counterboreDepthLowerDeviation", "h: нижнее отклонение", "мм", "Допуски", -5, 5, .01, "Отклонение от номинала h до нижней границы глубины ступени"),
+        new("counterboreDepthUpperDeviation", "h: верхнее отклонение", "мм", "Допуски", -5, 5, .01, "Отклонение от номинала h до верхней границы глубины ступени")
     });
 
     // Имена полей едины для формы, JSON и сообщений валидации.
@@ -146,8 +146,8 @@ public static class Engine
         if (c.TargetFlangeDiameter - p.BodyDiameter < minRemoval - 1e-8) Error("bodyDiameter", "Перепад наружных расчётных диаметров слишком мал для данного чистового припуска.");
         if (c.TargetCounterboreDiameter - c.TargetBoreDiameter < minRemoval - 1e-8) Error("counterboreDiameter", "Перепад внутренних расчётных диаметров слишком мал для данного чистового припуска.");
         if (p.FinishAllowance > Math.Min(p.DepthOutside, p.DepthInside)) Error("finishAllowance", "Чистовой припуск не должен превышать разрешённую глубину прохода.");
-        if (p.StockBore - 2 * p.ClearanceX < 12) Error("clearanceX", "В исходном отверстии недостаточно места для учебного отвода (минимальный X 12 мм).");
-        if (p.FeedFinish > p.FeedRough) Error("feedFinish", "В учебном профиле чистовая подача не превышает черновую.");
+        if (p.StockBore - 2 * p.ClearanceX < 12) Error("clearanceX", "В исходном отверстии недостаточно места для отвода инструмента (минимальный X 12 мм).");
+        if (p.FeedFinish > p.FeedRough) Error("feedFinish", "Чистовая подача не должна превышать черновую.");
         double Count(double difference, double depth) => Math.Max(0, Math.Ceiling((difference - 2 * p.FinishAllowance - 1e-8) / (2 * depth)));
         var passes = Count(p.StockDiameter - c.TargetFlangeDiameter, p.DepthOutside) + Count(p.StockDiameter - p.BodyDiameter, p.DepthOutside)
             + Count(c.TargetBoreDiameter - p.StockBore, p.DepthInside) + Count(c.TargetCounterboreDiameter - c.TargetBoreDiameter, p.DepthInside) + 4;
@@ -177,22 +177,14 @@ public static class Engine
         if (errors.Count > 0) return new(false, errors, [], null);
         var c = Calculate(p);
         var id = "V-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Version + "|" + JsonSerializer.Serialize(p, ProjectFiles.JsonOptions))))[..16];
-        var warnings = new List<string>
-        {
-            "Учебный профиль. Db=100, b=12, материал, заготовка и режимы — изменяемые предложения разработчика. Материал не выбирает режимы автоматически.",
-            "Расчётные размеры выбраны в середине заданных полей допусков и округлены до 0,001 мм. Это проектное решение; фактическая точность обработки не гарантируется.",
-            "Диалект LinuxCNC 2.9, G7: X задаётся диаметром. Привязка к реальному станку и его инструментальной таблице отсутствует.",
-            "Модель идеальной точки инструмента: радиус вершины, державка, патрон, силы закрепления, прогиб, столкновения и достижимость допусков не проверяются.",
-            "Операция 005 подготавливает торец и сквозное исходное отверстие. УП покрывает только 010. Отрезка и доводка заднего торца выполняются отдельно в 020.",
-            "Время рассчитано только для G1, включая подводы на рабочей подаче. Быстрые перемещения, смена инструмента, ручные операции и разгон не нормируются."
-        };
+        var warnings = new List<string>();
         var controls = HtmlCards.ControlDescription(p, c);
         var operations = new List<Operation>
         {
             new("005", "Подготовка заготовки", "manual", $"Получить цилиндрическую заготовку Ø{Fmt(p.StockDiameter)} / Ø{Fmt(p.StockBore)} × {Fmt(c.StockLength)} мм со сквозным отверстием и подготовленным правым торцом. Метод получения отверстия и контроль выбираются технологом. Длина указана после подготовки торца."),
-            new("010", "Токарная с ЧПУ — учебная", "nc", $"Один установ за хвостовик {Fmt(p.GripLength)} мм. Z0 — правый подготовленный торец, Z− — к зажиму. Обработать буртик, тело, отверстие и расточку. Длина обработки {Fmt(c.CutLength)} мм включает задний припуск. Расчётные диаметры D={Fmt(c.TargetFlangeDiameter)}, d={Fmt(c.TargetBoreDiameter)}, d2={Fmt(c.TargetCounterboreDiameter)}; глубина h={Fmt(c.TargetCounterboreDepth)} мм."),
-            new("020", "Отделение и доводка", "manual", $"Отделить деталь с сохранением припуска {Fmt(p.TrimAllowance)} мм; переустановить в мягкие кулачки и довести задний торец до расчётной длины {Fmt(c.TargetLength)} мм (номинал {Fmt(p.Length)}, границы {Fmt(p.Length + p.LengthLowerDeviation)}…{Fmt(p.Length + p.LengthUpperDeviation)} мм). Удалить заусенцы. Фаски не назначаются: размеры отсутствуют. Закрепление и отрезной инструмент требуют уточнения."),
-            new("030", "Контроль", "manual", controls + $" Db={Fmt(p.BodyDiameter)}, b={Fmt(p.FlangeWidth)} мм — учебные размеры без заданных допусков. Средства: микрометр/штангенциркуль, нутромер и глубиномер по согласованной методике. Расчётная цель не гарантирует фактическую точность; шероховатость пока не утверждена.")
+            new("010", "Токарная с ЧПУ", "nc", $"Один установ за хвостовик {Fmt(p.GripLength)} мм. Z0 — правый подготовленный торец, Z− — к зажиму. Обработать буртик, тело, отверстие и расточку. Длина обработки {Fmt(c.CutLength)} мм включает задний припуск. Расчётные диаметры D={Fmt(c.TargetFlangeDiameter)}, d={Fmt(c.TargetBoreDiameter)}, d2={Fmt(c.TargetCounterboreDiameter)}; глубина h={Fmt(c.TargetCounterboreDepth)} мм."),
+            new("020", "Отделение и доводка", "manual", $"Отделить деталь с сохранением припуска {Fmt(p.TrimAllowance)} мм; переустановить и довести задний торец до расчётной длины {Fmt(c.TargetLength)} мм (номинал {Fmt(p.Length)}, границы {Fmt(p.Length + p.LengthLowerDeviation)}…{Fmt(p.Length + p.LengthUpperDeviation)} мм). Удалить заусенцы."),
+            new("030", "Контроль", "manual", controls + $" Проверить Db={Fmt(p.BodyDiameter)}, b={Fmt(p.FlangeWidth)} мм. Средства: микрометр/штангенциркуль, нутромер и глубиномер.")
         };
         var definitions = new[]
         {
@@ -209,9 +201,10 @@ public static class Engine
         var moves = new List<Move>();
         var lines = new List<string>
         {
+            $"% {id}",
             $"(PARAMFORGE {Version} - {id})",
-            "(EDUCATIONAL - NOT VERIFIED ON A MACHINE)",
-            "(LINUXCNC 2.9 - MM - X DIAMETER - OPERATION 010 ONLY)",
+            "(NOT VERIFIED ON A MACHINE)",
+            "(AXIOMA CONTROL - MM - X DIAMETER - OPERATION 010 ONLY)",
             $"(TARGETS D {Fmt(c.TargetFlangeDiameter)} d {Fmt(c.TargetBoreDiameter)} d2 {Fmt(c.TargetCounterboreDiameter)} L {Fmt(c.TargetLength)} h {Fmt(c.TargetCounterboreDepth)})"
         };
         var line = 0;
@@ -228,7 +221,9 @@ public static class Engine
             t?.Blocks.Add(number);
             position = (x, z);
         }
-        Emit("G21 G18 G7 G90 G95 G97 G40 G49 G80 G54");
+        Emit("G21 G18 G90 G94 G97 G40 G49 G80 G54");
+        Emit("G10 X1");
+        Emit("M5");
         foreach (var d in definitions)
         {
             var t = new Transition
@@ -240,11 +235,14 @@ public static class Engine
             };
             if (d.Tool != activeTool)
             {
-                if (activeTool != 0) { Move("G0", c.ClearOut, p.ClearanceZ, null); Emit("M5"); }
-                Emit($"T{d.Tool} M6"); activeTool = d.Tool;
+                if (activeTool != 0) { Move("G0", c.ClearOut, p.ClearanceZ, null); Emit("G94"); Emit("M5"); }
+                Emit($"T{d.Tool} D1 M66");
+                Emit("G43");
+                activeTool = d.Tool;
             }
             lines.Add($"(TR {d.Id} {d.Tag})");
             Emit($"S{Fmt(t.Rpm)} M3");
+            Emit("G95");
             // После смены инструмента исходная точка задаётся явным G0.
             Move("G0", d.Kind == "inner" ? c.ClearIn : c.ClearOut, p.ClearanceZ, t);
             foreach (var diameter in t.Passes)
@@ -267,9 +265,9 @@ public static class Engine
             }
             transitions.Add(t);
         }
-        Move("G0", c.ClearIn, p.ClearanceZ, null); Move("G0", c.ClearOut, p.ClearanceZ, null); Emit("M5"); Emit("M2");
+        Move("G0", c.ClearIn, p.ClearanceZ, null); Move("G0", c.ClearOut, p.ClearanceZ, null); Emit("G94"); Emit("M5"); Emit("M30");
         c = c with { TotalCutMinutes = transitions.Sum(t => t.CutMinutes) };
-        var nc = string.Join('\n', lines) + "\n";
+        var nc = string.Join("\r\n", lines) + "\r\n";
         var verification = NcVerifier.Verify(nc, p);
         if (!verification.Ok) errors.AddRange(verification.Errors.Select(e => new ValidationError("nc", e)));
         if (verification.Moves.Count != moves.Count) errors.Add(new("nc", "Независимая проверка восстановила другое число движений."));

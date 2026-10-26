@@ -11,7 +11,7 @@ internal sealed class MainForm : Form
     private readonly ErrorProvider errors = new() { BlinkStyle = ErrorBlinkStyle.NeverBlink };
     private readonly ToolTip tips = new() { AutoPopDelay = 14000, InitialDelay = 400 };
     private readonly SketchCanvas sketch = new() { Dock = DockStyle.Fill };
-    private readonly Button exportButton = Theme.Button("Получить 3 файла", true);
+    private readonly Button exportButton = Theme.Button("Сформировать документы", true);
     private readonly Label status = Theme.Label("", Theme.Small);
     private readonly System.Windows.Forms.Timer previewTimer = new() { Interval = 180 };
     private Parameters working = Engine.Defaults;
@@ -27,8 +27,11 @@ internal sealed class MainForm : Form
     internal bool DrawingLabelsOverlap => sketch.LabelsOverlap;
     internal bool RearWallsClosed => sketch.RearWallsClosed;
     internal bool DrawingLabelsClearOfMaterial => sketch.LabelsClearOfMaterial;
-    internal bool DrawingBoreLeadersClearOfMaterial => sketch.BoreLeadersClearOfMaterial;
+    internal bool DrawingBoreDimensionsClearOfMaterial => sketch.BoreDimensionsClearOfMaterial;
     internal int DrawingDpi => sketch.DeviceDpi;
+    internal int DrawingDimensionCount => sketch.DimensionCount;
+    internal bool DrawingLabelsClearOfRearEdges => sketch.LabelsClearOfRearEdges;
+    internal string DimensionText(string key) => sketch.DimensionText(key);
 
     internal MainForm()
     {
@@ -48,7 +51,7 @@ internal sealed class MainForm : Form
         file.DropDownItems.Add("Открыть параметры JSON…", null, (_, _) => OpenParameters());
         file.DropDownItems.Add("Сохранить параметры JSON…", null, (_, _) => SaveParameters());
         file.DropDownItems.Add(new ToolStripSeparator());
-        file.DropDownItems.Add("Учебный пример", null, (_, _) => { SetParameters(Engine.Defaults); GenerateNow(); });
+        file.DropDownItems.Add("Исходные параметры", null, (_, _) => { SetParameters(Engine.Defaults); GenerateNow(); });
         file.DropDownItems.Add(new ToolStripSeparator());
         file.DropDownItems.Add("Выход", null, (_, _) => Close());
         menu.Items.Add(file);
@@ -66,6 +69,7 @@ internal sealed class MainForm : Form
         Controls.Add(root);
         Controls.Add(menu);
         previewTimer.Tick += (_, _) => { previewTimer.Stop(); UpdatePreview(); };
+        sketch.DimensionClicked += EditDimension;
         SetParameters(Engine.Defaults);
         GenerateNow();
     }
@@ -92,7 +96,7 @@ internal sealed class MainForm : Form
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 274));
-        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
+        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 8));
@@ -153,25 +157,20 @@ internal sealed class MainForm : Form
 
     private Control BuildAssumptions()
     {
-        var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 3, Margin = new Padding(0, 9, 0, 4) };
+        var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2, Margin = new Padding(0, 9, 0, 4) };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 36));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 41));
-        table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var title = Theme.Label("Принятые размеры, мм", Theme.Small);
+        var title = Theme.Label("Дополнительные размеры, мм", Theme.Small);
         table.Controls.Add(title, 0, 0);
         table.SetColumnSpan(title, 4);
         table.Controls.Add(Theme.Label("Db", Theme.Small), 0, 1);
         table.Controls.Add(Input("bodyDiameter"), 1, 1);
         table.Controls.Add(Theme.Label("b", Theme.Small), 2, 1);
         table.Controls.Add(Input("flangeWidth"), 3, 1);
-        var note = Theme.Label("Db и b — учебные допущения.", Theme.Small);
-        note.ForeColor = Theme.Muted;
-        table.Controls.Add(note, 0, 2);
-        table.SetColumnSpan(note, 4);
         return table;
     }
 
@@ -198,7 +197,7 @@ internal sealed class MainForm : Form
 
     private static PropertyInfo Property(string key) => typeof(Parameters).GetProperty(char.ToUpperInvariant(key[0]) + key[1..]) ?? throw new InvalidOperationException(key);
     internal static string F(double value) => value.ToString("0.###", CultureInfo.GetCultureInfo("ru-RU"));
-    private static bool TryNumber(string text, out double value) => double.TryParse(text.Trim().Replace(',', '.'), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value) && double.IsFinite(value);
+    internal static bool TryNumber(string text, out double value) => double.TryParse(text.Trim().Replace(',', '.'), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value) && double.IsFinite(value);
 
     internal void SetParameters(Parameters value)
     {
@@ -307,6 +306,24 @@ internal sealed class MainForm : Form
         using var dialog = new ProcessingDialog(value, inputs.Keys.ToHashSet());
         if (dialog.ShowDialog(this) == DialogResult.OK) SetParameters(dialog.Result!);
     }
+
+    private void EditDimension(string key)
+    {
+        var baseline = ReadParameters(false, false);
+        if (baseline is null) return;
+        previewTimer.Stop();
+        using var editor = new DimensionEditDialog(key, baseline, candidate => Engine.Generate(candidate));
+        if (editor.ShowDialog(this) != DialogResult.OK || editor.Result is null) return;
+        SetParameters(editor.Result.Params);
+        project = editor.Result;
+        stale = false;
+        sketch.Parameters = project.Params;
+        status.Text = "";
+    }
+
+    internal Control DrawingControl => sketch;
+    internal RectangleF DimensionHitBounds(string key) => sketch.DimensionHitBounds(key);
+    internal string? HitDimension(Point point) => sketch.HitDimension(point);
 
     private void ShowTargets()
     {

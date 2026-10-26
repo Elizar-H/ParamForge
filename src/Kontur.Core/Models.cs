@@ -1,10 +1,10 @@
 namespace Kontur.Core;
 
-/// <summary>Изменяемый учебный профиль. Размеры и режимы не заменяют исходный чертёж.</summary>
+/// <summary>Параметры детали, заготовки и обработки.</summary>
 public record Parameters
 {
     public string PartName { get; init; } = "Втулка с буртиком";
-    public string Material { get; init; } = "Сталь 45 — учебное допущение";
+    public string Material { get; init; } = "Сталь 45";
     public double Length { get; init; } = 116;
     public double FlangeDiameter { get; init; } = 120;
     public double BodyDiameter { get; init; } = 100;

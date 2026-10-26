@@ -99,7 +99,7 @@ internal static class Program
             evidence = Evidence,
             limitations = new[]
             {
-                "Static verification of an educational LinuxCNC subset and ideal point-tool coordinate envelope.",
+                "Static verification of the generated AxiOMA Control command subset and ideal point-tool coordinate envelope.",
                 "No collision, stock removal, tool geometry, fixture, controller execution or machining accuracy simulation.",
                 "G1 time excludes rapids, acceleration, tool changes and manual operations."
             },
@@ -522,10 +522,10 @@ internal static class Program
         foreach (var raw in nc.Split('\n'))
         {
             var line = Regex.Replace(raw, @"\([^()]*\)", "").Trim();
-            if (line.Length == 0 || line == "%") continue;
+            if (line.Length == 0 || line.StartsWith("%", StringComparison.Ordinal)) continue;
             var words = Regex.Matches(line.ToUpperInvariant(), @"([A-Z])([+-]?(?:\d+(?:\.\d*)?|\.\d+))")
                 .Select(m => (Letter: m.Groups[1].Value, Number: double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture))).ToArray();
-            if (words.Any(w => w.Letter == "M" && w.Number == 6)) previous = null;
+            if (words.Any(w => w.Letter == "M" && w.Number is 6 or 66)) previous = null;
             var speed = words.FirstOrDefault(w => w.Letter == "S");
             if (speed.Letter is not null) rpm = speed.Number;
             var motion = words.FirstOrDefault(w => w.Letter == "G" && w.Number is 0 or 1);
@@ -546,49 +546,66 @@ internal static class Program
         return new(moves, minutes);
     }
 
-    private const string Fixture = """
-        (EDUCATIONAL POINT-TOOL PROGRAM)
-        %
-        N10 G21 G18 G7 G90 G95 G97 G40 G49 G80 G54
-        N20 T1 M6
+    private static readonly string Fixture = """
+        % TEST_PROFILE
+        (POINT-TOOL CHECK FIXTURE)
+        N10 G21 G18 G90 G94 G97 G40 G49 G80 G54
+        N11 G10 X1
+        N12 M5
+        N20 T1 D1 M66
+        N21 G43
         N30 S100 M3
+        N31 G95
         N40 G0 X128 Z3
         N50 G0 X120 Z3
         N60 G1 X120 Z-12 F0.2
         N70 G1 X124 Z-12 F0.2
+        N75 G94
         N80 M5
-        N90 M2
-        %
-        """;
+        N90 M30
+        """.ReplaceLineEndings("\r\n");
 
     private static void RegisterVerifierTests()
     {
-        Add("analytic NC fixture gives 15 mm axial plus 2 mm radial = 0.85 minutes", () =>
+        Add("analytic AxiOMA fixture gives 15 mm axial plus 2 mm radial = 0.85 minutes", () =>
         {
             var v = NcVerifier.Verify(Fixture, Engine.Defaults);
             Check(v.Ok, string.Join("; ", v.Errors)); Equal(4, v.Moves.Count);
             Near(.85, v.CutMinutes, 1e-12); Near(.85, ReadGeneratedNc(Fixture).Minutes, 1e-12);
             Sequence(new[] { 40, 50, 60, 70 }, v.Moves.Select(m => m.Line));
+            Check(v.Moves.All(move => move.Line != 11), "G10 X1 configures diameter mode rather than moving to X1");
         });
-        Add("lowercase compact NC, ASCII comments and optional percent pair are supported", () =>
+        Add("lowercase compact AxiOMA NC and ASCII comments are supported", () =>
         {
             var compact = Fixture.ToLowerInvariant().Replace("n60 g1 x120 z-12 f0.2", "n60g1x120z-12f.2 (cut)", StringComparison.Ordinal);
             Check(NcVerifier.Verify(compact, Engine.Defaults).Ok, "compact lowercase NC");
-            Check(NcVerifier.Verify(Fixture.Replace("%", "", StringComparison.Ordinal), Engine.Defaults).Ok, "optional percent delimiters");
+            foreach (var comment in new[] { "; cut", "// cut" })
+            {
+                var commented = Fixture.Replace("N60 G1 X120 Z-12 F0.2", "N60 G1 X120 Z-12 F0.2 " + comment, StringComparison.Ordinal);
+                var result = NcVerifier.Verify(commented, Engine.Defaults);
+                Check(result.Ok, "official ASCII line comment: " + string.Join("; ", result.Errors));
+                Near(.85, result.CutMinutes, 1e-12);
+            }
         });
-        foreach (var mode in new[] { "G21", "G18", "G7", "G90", "G95", "G97", "G40", "G49", "G80", "G54" })
+        Add("manual and automatic tool changes both select an explicit tool edge", () =>
+        {
+            var automatic = Fixture.Replace("T1 D1 M66", "T1 D1 M6", StringComparison.Ordinal);
+            var v = NcVerifier.Verify(automatic, Engine.Defaults);
+            Check(v.Ok, string.Join("; ", v.Errors)); Near(.85, v.CutMinutes, 1e-12);
+        });
+        foreach (var mode in new[] { "G21", "G18", "G90", "G97", "G40", "G49", "G80", "G54" })
         {
             var required = mode;
-            Add("verifier rejects omitted preparation " + required, () => InvalidNc(Fixture.Replace(required + " ", "", StringComparison.Ordinal).Replace(required + "\n", "\n", StringComparison.Ordinal)));
+            Add("verifier rejects omitted preparation " + required, () =>
+                InvalidNc(Regex.Replace(Fixture, @"\b" + required + @"\b ?", "")));
         }
         var mutations = new (string Name, string Find, string Replace)[]
         {
             ("incremental coordinates", "G90", "G91"),
             ("inch units", "G21", "G20"),
-            ("unsupported cycle", "N60 G1", "N60 G71"),
+            ("unsupported cycle", "N60 G1", "N60 G81"),
             ("coordinate expression", "X120 Z-12", "X[120] Z-12"),
             ("unknown Y word", "N50 G0", "N50 G0 Y1"),
-            ("semicolon comment", "N50 G0 X120 Z3", "N50 G0 X120 Z3 ; comment"),
             ("duplicate block number", "N60 ", "N50 "),
             ("descending block number", "N60 ", "N45 "),
             ("missing block number", "N60 ", ""),
@@ -614,15 +631,37 @@ internal static class Program
             ("missing rpm", "N30 S100 M3", "N30 M3"),
             ("implicit G1 feed", "N70 G1 X124 Z-12 F0.2", "N70 G1 X124 Z-12"),
             ("unsupported tool", "T1", "T3"),
-            ("tool not loaded", "T1 M6", "T1"),
-            ("tool change with running spindle", "N70 G1 X124 Z-12 F0.2", "N70 T2 M6"),
-            ("missing stop before end", "N80 M5\n", ""),
-            ("commands after M2", "N90 M2", "N90 M2\nN100 G0 X128 Z3"),
-            ("missing M2", "N90 M2", ""),
-            ("unclosed comment", "(EDUCATIONAL POINT-TOOL PROGRAM)", "(unfinished"),
-            ("nested comment", "(EDUCATIONAL POINT-TOOL PROGRAM)", "(outer(inner))"),
-            ("non-ASCII NC comment", "(EDUCATIONAL POINT-TOOL PROGRAM)", "(учебная)"),
-            ("percent inside program", "N60 G1", "%\nN60 G1")
+            ("tool not loaded", "T1 D1 M66", "T1 D1"),
+            ("tool change with running spindle", "N70 G1 X124 Z-12 F0.2", "N70 T2 D1 M66"),
+            ("missing stop before end", "N80 M5", "(stop omitted)"),
+            ("commands after M30", "N90 M30", "N90 M30\r\nN100 G0 X128 Z3"),
+            ("missing M30", "N90 M30", "(end omitted)"),
+            ("unclosed comment", "(POINT-TOOL CHECK FIXTURE)", "(unfinished"),
+            ("nested comment", "(POINT-TOOL CHECK FIXTURE)", "(outer(inner))"),
+            ("non-ASCII NC comment", "(POINT-TOOL CHECK FIXTURE)", "(непроверено)"),
+            ("percent inside program", "N60 G1", "% OTHER\r\nN60 G1"),
+            ("missing program header", "% TEST_PROFILE", "(header omitted)"),
+            ("unnamed program header", "% TEST_PROFILE", "%"),
+            ("LinuxCNC diameter mode", "N11 G10 X1", "N11 G7"),
+            ("radius programming instead of diameter mode", "N11 G10 X1", "N11 G10 X0"),
+            ("diameter mode with no transverse-axis setting", "N11 G10 X1", "N11 G10"),
+            ("diameter mode shares a block", "N11 G10 X1", "N11 G10 X1 G90"),
+            ("diameter mode with Z word", "N11 G10 X1", "N11 G10 X1 Z0"),
+            ("missing diameter mode", "N11 G10 X1", "(diameter mode omitted)"),
+            ("missing explicit edge at tool selection", "T1 D1 M66", "T1 M66"),
+            ("zero edge disables correction", "T1 D1 M66", "T1 D0 M66"),
+            ("standalone edge selection", "N21 G43", "N21 D1 G43"),
+            ("LinuxCNC H compensation word", "N21 G43", "N21 G43 H1"),
+            ("missing tool compensation", "N21 G43", "(G43 omitted)"),
+            ("conflicting tool compensation", "N21 G43", "N21 G43 G49"),
+            ("G95 before spindle speed is set", "N12 M5", "N12 G95\r\nN13 G94\r\nN14 M5"),
+            ("G95 without running spindle", "N31 G95", "N31 M5\r\nN32 G95"),
+            ("missing feed-per-revolution mode", "N31 G95", "(G95 omitted)"),
+            ("G94 during cutting", "N60 G1", "N59 G94\r\nN60 G1"),
+            ("M5 while G95 is active", "N75 G94", "(G94 omitted)"),
+            ("conflicting feed modes", "N31 G95", "N31 G94 G95"),
+            ("LinuxCNC program end", "N90 M30", "N90 M2"),
+            ("old paired-percent terminator", "N90 M30", "N90 M30\r\n%")
         };
         foreach (var mutation in mutations)
         {
@@ -648,11 +687,22 @@ internal static class Program
         });
         Add("tool change requires fresh G0 and resets the unknown position", () =>
         {
-            var changed = Fixture.Replace("N70 G1 X124 Z-12 F0.2", "N61 M5\nN62 T2 M6\nN63 S100 M3\nN70 G1 X41 Z-12 F0.2", StringComparison.Ordinal);
+            var changed = Fixture.Replace("N70 G1 X124 Z-12 F0.2",
+                "N61 G94\r\nN62 M5\r\nN63 T2 D1 M66\r\nN64 G43\r\nN65 S100 M3\r\nN66 G95\r\nN70 G1 X41 Z-12 F0.2", StringComparison.Ordinal);
             InvalidNc(changed);
-            var valid = changed.Replace("N70 G1 X41 Z-12 F0.2", "N65 G0 X41 Z3\nN70 G1 X41 Z-12 F0.2", StringComparison.Ordinal);
+            var valid = changed.Replace("N70 G1 X41 Z-12 F0.2", "N67 G0 X41 Z3\r\nN70 G1 X41 Z-12 F0.2", StringComparison.Ordinal);
             var v = NcVerifier.Verify(valid, Engine.Defaults);
             Check(v.Ok, string.Join("; ", v.Errors)); Near(1.5, v.CutMinutes, 1e-12);
+            InvalidNc(valid.Replace("N64 G43", "(second G43 omitted)", StringComparison.Ordinal));
+            InvalidNc(valid.Replace("N66 G95", "(second G95 omitted)", StringComparison.Ordinal));
+        });
+        Add("feed-mode changes require a new cutting feed after returning to G95", () =>
+        {
+            var changed = Fixture.Replace("N70 G1 X124 Z-12 F0.2",
+                "N61 G94\r\nN62 F0.2\r\nN63 G95\r\nN70 G1 X124 Z-12", StringComparison.Ordinal);
+            InvalidNc(changed);
+            var valid = changed.Replace("N70 G1 X124 Z-12", "N70 G1 X124 Z-12 F0.2", StringComparison.Ordinal);
+            Check(NcVerifier.Verify(valid, Engine.Defaults).Ok, "explicit F after returning to G95");
         });
         Add("empty NC and absent or nonfinite bounds fail cleanly", () =>
         {
@@ -752,8 +802,14 @@ internal static class Program
                 var other = second.Single(f => Path.GetFileName(f) == Path.GetFileName(path));
                 Sequence(File.ReadAllBytes(path), File.ReadAllBytes(other));
             }
-            var exportedNc = File.ReadAllText(Path.Combine(firstDirectory, "Управляющая программа.nc"), Encoding.UTF8);
+            var ncBytes = File.ReadAllBytes(Path.Combine(firstDirectory, "Управляющая программа.nc"));
+            Check(ncBytes.All(b => b <= 127), "NC is ASCII without a UTF-8 BOM");
+            var exportedNc = Encoding.ASCII.GetString(ncBytes);
             Equal(p.Nc, exportedNc, "exported NC matches the checked project");
+            Check(exportedNc.StartsWith("% ", StringComparison.Ordinal), "AxiOMA program-start line");
+            Check(!Regex.IsMatch(exportedNc, @"(?<!\r)\n|\r(?!\n)"), "NC uses only CRLF line separators");
+            Check(exportedNc.EndsWith("\r\n", StringComparison.Ordinal), "NC ends with CRLF");
+            Check(!Regex.IsMatch(exportedNc, @"\bG7\b|\bM2\b"), "LinuxCNC-only preparation and end are absent");
             var verification = NcVerifier.Verify(exportedNc, p.Params);
             Check(verification.Ok, string.Join("; ", verification.Errors));
             Near(p.Calculations.TotalCutMinutes, verification.CutMinutes);
@@ -1074,6 +1130,7 @@ internal static class Program
             Check(regimes.TryGetValue(t.Id, out var ncRegimes) && ncRegimes.Count > 0, "G1 regimes exist in NC for " + t.Id);
             foreach (var nc in ncRegimes!)
             {
+                Near(nc.Tool, FormNumber(row[2]));
                 Near(nc.Feed, FormNumber(row[7]), .000501);
                 Near(nc.Rpm, FormNumber(row[8]));
             }
@@ -1088,6 +1145,7 @@ internal static class Program
     {
         var result = new Dictionary<string, List<NcRegime>>(StringComparer.Ordinal);
         string? transition = null;
+        int? tool = null;
         double rpm = 0;
         foreach (var raw in nc.Split('\n'))
         {
@@ -1103,10 +1161,18 @@ internal static class Program
                 .Select(m => (Letter: m.Groups[1].Value, Number: double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture))).ToArray();
             var speed = words.FirstOrDefault(word => word.Letter == "S");
             if (speed.Letter is not null) rpm = speed.Number;
+            if (words.Any(word => word.Letter == "M" && word.Number is 6 or 66))
+            {
+                var selection = words.Single(word => word.Letter == "T").Number;
+                Check(selection == Math.Floor(selection) && selection is 1 or 2, "NC tool selection is an explicit known tool");
+                Near(1, words.Single(word => word.Letter == "D").Number);
+                tool = (int)selection;
+            }
             if (!words.Any(word => word.Letter == "G" && word.Number == 1)) continue;
             if (transition is null) throw new InvalidOperationException("G1 appears outside a tagged transition");
             var feed = words.Single(word => word.Letter == "F").Number;
-            result[transition].Add(new((int)words.Single(word => word.Letter == "N").Number, feed, rpm));
+            if (tool is null) throw new InvalidOperationException("G1 has no independently selected tool");
+            result[transition].Add(new((int)words.Single(word => word.Letter == "N").Number, feed, rpm, tool.Value));
         }
         return result;
     }
@@ -1132,5 +1198,5 @@ internal static class Program
     private sealed record TestResult(string Name, bool Passed, int Assertions, double DurationMilliseconds, string? Error);
     private sealed record ReadMove(double X, double Z, string Mode, int Line);
     private sealed record NcRead(List<ReadMove> Moves, double Minutes);
-    private sealed record NcRegime(int Line, double Feed, double Rpm);
+    private sealed record NcRegime(int Line, double Feed, double Rpm, int Tool);
 }

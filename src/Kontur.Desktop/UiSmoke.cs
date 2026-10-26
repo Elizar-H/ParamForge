@@ -26,7 +26,7 @@ internal static class UiSmoke
             Check("seventeen_main_numeric_inputs", form.MainNumericInputCount == 17, form.MainNumericInputCount);
             Check("default_generation", form.CurrentProject?.Verification.Ok == true && !form.IsStale);
             form.CaptureForm(Path.Combine(folder, "01-default-1280x850.png"));
-            Check("default_labels_and_closed_walls", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreLeadersClearOfMaterial);
+            Check("default_labels_and_closed_walls", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreDimensionsClearOfMaterial && form.DrawingLabelsClearOfRearEdges);
 
             form.SetInput("length", "132");
             Check("change_marks_stale", form.IsStale);
@@ -66,7 +66,7 @@ internal static class UiSmoke
                 form.SetParameters(profile);
                 Check(name + "_valid", form.GenerateNow());
                 form.CaptureForm(Path.Combine(folder, name + "-1280x850.png"));
-                Check(name + "_drawing", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreLeadersClearOfMaterial);
+                Check(name + "_drawing", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreDimensionsClearOfMaterial && form.DrawingLabelsClearOfRearEdges);
             }
             var thinProfile = Engine.Defaults with { Length = 250, FlangeDiameter = 35, BodyDiameter = 30, FlangeWidth = 2, BoreDiameter = 20, CounterboreDiameter = 22, CounterboreDepth = 1, StockDiameter = 36, StockBore = 18 };
             var wideProfile = Engine.Defaults with { Length = 20, FlangeDiameter = 200, BodyDiameter = 180, FlangeWidth = 2, BoreDiameter = 130, CounterboreDiameter = 150, CounterboreDepth = 1, StockDiameter = 204, StockBore = 128 };
@@ -75,11 +75,11 @@ internal static class UiSmoke
                 form.SetParameters(profile);
                 Check(name + "_valid", form.GenerateNow());
                 form.CaptureForm(Path.Combine(folder, name + "-1280x850.png"));
-                Check(name + "_drawing", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreLeadersClearOfMaterial);
+                Check(name + "_drawing", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreDimensionsClearOfMaterial && form.DrawingLabelsClearOfRearEdges);
                 form.Size = new Size(1100, 720);
                 form.CaptureForm(Path.Combine(folder, name + "-minimum.png"));
-                Check(name + "_minimum_drawing", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreLeadersClearOfMaterial,
-                    new { labelsInside = form.DrawingLabelsInside, labelsOverlap = form.DrawingLabelsOverlap, rearWallsClosed = form.RearWallsClosed, labelsClearOfMaterial = form.DrawingLabelsClearOfMaterial, boreLeadersClearOfMaterial = form.DrawingBoreLeadersClearOfMaterial });
+                Check(name + "_minimum_drawing", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreDimensionsClearOfMaterial && form.DrawingLabelsClearOfRearEdges,
+                    new { labelsInside = form.DrawingLabelsInside, labelsOverlap = form.DrawingLabelsOverlap, rearWallsClosed = form.RearWallsClosed, labelsClearOfMaterial = form.DrawingLabelsClearOfMaterial, boreDimensionsClearOfMaterial = form.DrawingBoreDimensionsClearOfMaterial, rearEdgesClear = form.DrawingLabelsClearOfRearEdges });
                 form.ClientSize = new Size(1280, 850);
             }
             foreach (var length in new[] { 80D, 116D, 160D })
@@ -89,14 +89,85 @@ internal static class UiSmoke
                     var valid = form.GenerateNow();
                     form.Refresh();
                     Application.DoEvents();
-                    Check($"drawing_L{length}_h{depth}", valid && form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreLeadersClearOfMaterial);
+                    Check($"drawing_L{length}_h{depth}", valid && form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreDimensionsClearOfMaterial && form.DrawingLabelsClearOfRearEdges);
                 }
             form.SetParameters(Engine.Defaults);
             form.GenerateNow();
             form.Size = new Size(1100, 720);
             form.CaptureForm(Path.Combine(folder, "05-minimum-1100x720.png"));
-            Check("minimum_drawing", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreLeadersClearOfMaterial, new { form.Width, form.Height });
+            Check("minimum_drawing", form.DrawingLabelsInside && !form.DrawingLabelsOverlap && form.RearWallsClosed && form.DrawingLabelsClearOfMaterial && form.DrawingBoreDimensionsClearOfMaterial && form.DrawingLabelsClearOfRearEdges, new { form.Width, form.Height });
             form.ClientSize = new Size(1280, 850);
+
+
+            // Exercise the canvas MouseClick event path at rendered hit coordinates and its real owned modal editor.
+            var edits = new[] { ("length", 132D), ("flangeDiameter", 122D), ("bodyDiameter", 98D),
+                ("flangeWidth", 14D), ("boreDiameter", 48D), ("counterboreDiameter", 76D), ("counterboreDepth", 32D) };
+            foreach (var (key, nominal) in edits)
+            {
+                form.SetParameters(Engine.Defaults); form.GenerateNow(); form.Refresh(); Application.DoEvents();
+                var before = form.CurrentProject!.Params;
+                var bounds = form.DimensionHitBounds(key);
+                Check("hit_area_" + key, bounds.Width >= 28 && bounds.Height >= 28 && form.HitDimension(Point.Round(new PointF(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2))) == key, bounds);
+                EditByCanvasClick(form, key, editor =>
+                {
+                    editor.NominalInput.Text = MainForm.F(nominal);
+                    if (key == "flangeWidth") CaptureDialog(editor, Path.Combine(folder, "11c-flange-width-editor.png"));
+                    PressDialogKey(editor, Keys.Enter);
+                });
+                var after = form.CurrentProject!.Params;
+                Check("canvas_edit_" + key + "_syncs_and_keeps_other_values",
+                    !form.IsStale && form.GetInput(key) == MainForm.F(nominal) && SameOtherParameters(before, after, key), after);
+            }
+            form.SetParameters(Engine.Defaults); form.GenerateNow(); form.Refresh(); Application.DoEvents();
+            Check("seven_nominal_dimension_labels", form.DrawingDimensionCount == 7 && edits.All(pair =>
+                form.DimensionText(pair.Item1) == ((pair.Item1 is "bodyDiameter" or "flangeDiameter" or "boreDiameter" or "counterboreDiameter") ? "⌀" : "") + MainForm.F((double)typeof(Parameters).GetProperty(char.ToUpperInvariant(pair.Item1[0]) + pair.Item1[1..])!.GetValue(Engine.Defaults)!)));
+            var beforeEditor = JsonSerializer.Serialize(form.CurrentProject!);
+            EditByCanvasClick(form, "length", editor =>
+            {
+                editor.NominalInput.Text = "150";
+                editor.LowerInput!.Text = "-0,2";
+                PressDialogKey(editor, Keys.Escape);
+            });
+            Check("canvas_escape_discards_changes", beforeEditor == JsonSerializer.Serialize(form.CurrentProject!) && form.GetInput("length") == "116");
+            EditByCanvasClick(form, "bodyDiameter", editor =>
+            {
+                Check("nominal_only_dimension_has_no_fake_tolerances", editor.LowerInput is null && editor.UpperInput is null);
+                editor.NominalInput.Text = "99"; CaptureDialog(editor, Path.Combine(folder, "11b-body-diameter-editor.png")); editor.CancelEditorButton.PerformClick();
+            });
+            Check("canvas_cancel_button_discards_changes", beforeEditor == JsonSerializer.Serialize(form.CurrentProject!));
+            EditByCanvasClick(form, "boreDiameter", editor =>
+            {
+                editor.NominalInput.Text = "48"; editor.LowerInput!.Text = "-0,1"; editor.UpperInput!.Text = "0,5";
+                CaptureDialog(editor, Path.Combine(folder, "11-dimension-editor.png"));
+                PressDialogKey(editor, Keys.Enter);
+            });
+            Check("canvas_tolerance_edit_recalculates_target", !form.IsStale && form.CurrentProject!.Calculations.TargetBoreDiameter == 48.2 && form.GetInput("boreLowerDeviation") == "-0,1" && form.GetInput("boreUpperDeviation") == "0,5");
+            form.SetParameters(Engine.Defaults); form.GenerateNow(); form.Refresh(); Application.DoEvents();
+            beforeEditor = JsonSerializer.Serialize(form.CurrentProject!);
+            foreach (var (name, key, text, error) in new[] { ("not_number", "length", "abc", "Введите число."), ("geometry", "flangeDiameter", "90", "Для чертежа нужно Db < D.") })
+            {
+                EditByCanvasClick(form, key, editor =>
+                {
+                    editor.NominalInput.Text = text; editor.ApplyButton.PerformClick();
+                    Check("canvas_" + name + "_does_not_apply", editor.Visible && editor.Result is null && editor.ErrorText == error && beforeEditor == JsonSerializer.Serialize(form.CurrentProject!));
+                    CaptureDialog(editor, Path.Combine(folder, "12-invalid-editor-" + name + ".png"));
+                    PressDialogKey(editor, Keys.Escape);
+                });
+                Check("canvas_" + name + "_preserves_model_and_side_fields", beforeEditor == JsonSerializer.Serialize(form.CurrentProject!) && !form.IsStale);
+            }
+            EditByCanvasClick(form, "counterboreDepth", editor =>
+            {
+                editor.LowerInput!.Text = "1"; editor.UpperInput!.Text = "0"; editor.ApplyButton.PerformClick();
+                Check("canvas_reversed_tolerance_rejected", editor.Visible && editor.Result is null && editor.ErrorText == "Верхнее отклонение ниже нижнего.");
+                PressDialogKey(editor, Keys.Escape);
+            });
+            form.Size = new Size(1100, 720); form.Refresh(); Application.DoEvents();
+            EditByCanvasClick(form, "counterboreDiameter", editor =>
+            {
+                editor.NominalInput.Text = "76"; PressDialogKey(editor, Keys.Enter);
+            });
+            Check("canvas_edit_after_resize", form.GetInput("counterboreDiameter") == "76" && !form.IsStale);
+            form.ClientSize = new Size(1280, 850); form.SetParameters(Engine.Defaults); form.GenerateNow();
 
             var json = Path.Combine(folder, "parameters.json");
             form.SaveToPath(json);
@@ -164,8 +235,14 @@ internal static class UiSmoke
                 Application.DoEvents();
                 simulated.SimulateDpiText(targetDpi);
                 simulated.CaptureForm(Path.Combine(folder, $"06-text-scale-simulation-{targetDpi}dpi.png"));
-                Check("text_scale_simulation_" + targetDpi, simulated.DrawingLabelsInside && !simulated.DrawingLabelsOverlap && simulated.RearWallsClosed && simulated.DrawingLabelsClearOfMaterial && simulated.DrawingBoreLeadersClearOfMaterial,
+                Check("text_scale_simulation_" + targetDpi, simulated.DrawingLabelsInside && !simulated.DrawingLabelsOverlap && simulated.RearWallsClosed && simulated.DrawingLabelsClearOfMaterial && simulated.DrawingBoreDimensionsClearOfMaterial && simulated.DrawingLabelsClearOfRearEdges,
                     new { simulatedDpi = targetDpi, actualWindowsDpi = simulated.DeviceDpi, scope = "application text scaling simulation; Windows DPI settings unchanged" });
+                foreach (var key in new[] { "length", "flangeDiameter", "bodyDiameter", "flangeWidth", "boreDiameter", "counterboreDiameter", "counterboreDepth" })
+                {
+                    var before = JsonSerializer.Serialize(simulated.CurrentProject!);
+                    EditByCanvasClick(simulated, key, editor => PressDialogKey(editor, Keys.Escape));
+                    Check("scaled_hit_" + targetDpi + "_" + key, before == JsonSerializer.Serialize(simulated.CurrentProject!) && !simulated.IsStale);
+                }
                 simulated.Close();
             }
             catch (Exception ex) { failures.Add("simulation " + targetDpi + ": " + ex); }
@@ -174,9 +251,50 @@ internal static class UiSmoke
         {
             ok = failures.Count == 0, framework = "Windows Forms", executedAtUtc = DateTime.UtcNow,
             dpiTesting = "Actual host DPI plus text/control scaling simulations. These simulations are not real Windows DPI-switch tests.",
+            dimensionEditingTesting = "Rendered hit coordinates through Control.OnMouseClick into actual modal dialogs; Form.ProcessDialogKey checks Enter/Esc. No global OS input injection.",
             checks, failures
         }, new JsonSerializerOptions { WriteIndented = true }));
         Environment.ExitCode = failures.Count == 0 ? 0 : 1;
+    }
+
+
+    private static bool SameOtherParameters(Parameters before, Parameters after, string edited)
+    {
+        var name = char.ToUpperInvariant(edited[0]) + edited[1..];
+        return typeof(Parameters).GetProperties().Where(property => property.Name != name).All(property => Equals(property.GetValue(before), property.GetValue(after)));
+    }
+    private static void CaptureDialog(Form dialog, string path)
+    {
+        dialog.Refresh(); Application.DoEvents();
+        using var bitmap = new Bitmap(dialog.Width, dialog.Height);
+        dialog.DrawToBitmap(bitmap, new Rectangle(Point.Empty, dialog.Size)); bitmap.Save(path);
+    }
+    private static void PressDialogKey(Form dialog, Keys key) =>
+        typeof(Form).GetMethod("ProcessDialogKey", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(dialog, [key]);
+
+    // Invoke the same control MouseClick handler used by WinForms, at an actual
+    // rendered label coordinate. This is a synthetic control event, not a global
+    // OS mouse click. Its owned modal and Enter/Esc handlers run normally.
+    private static void EditByCanvasClick(MainForm owner, string key, Action<DimensionEditDialog> edit)
+    {
+        owner.Refresh(); Application.DoEvents();
+        var bounds = owner.DimensionHitBounds(key);
+        if (bounds.IsEmpty) throw new InvalidOperationException("Missing hit area: " + key);
+        var point = Point.Round(new PointF(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2));
+        var edited = false;
+        using var watchdog = new System.Threading.Timer(_ => Environment.Exit(4), null, 10_000, Timeout.Infinite);
+        using var timer = new System.Windows.Forms.Timer { Interval = 100 };
+        timer.Tick += (_, _) =>
+        {
+            var editor = Application.OpenForms.OfType<DimensionEditDialog>().FirstOrDefault(dialog => dialog.Owner == owner);
+            if (editor is null) return;
+            timer.Stop(); edited = true; edit(editor);
+        };
+        timer.Start();
+        typeof(Control).GetMethod("OnMouseClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(owner.DrawingControl, [new MouseEventArgs(MouseButtons.Left, 1, point.X, point.Y, 0)]);
+        timer.Stop();
+        if (!edited) throw new InvalidOperationException("Canvas click did not open editor: " + key);
     }
 
     private static IEnumerable<Control> Descendants(Control root)
