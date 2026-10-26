@@ -70,6 +70,14 @@ internal static class UiSmoke
                 try { form.ExportToNewSubfolder(blockedPath); }
                 catch (InvalidOperationException) { blocked = true; }
                 Check("tool_profile_" + name + "_export_blocked", blocked && !Directory.Exists(blockedPath));
+                if (name is "length160" or "length250" or "stock_bore18" or "holder_clearance" or "grip15" or "chuck_clearance5" or "second_setup_length20")
+                {
+                    form.Refresh(); Application.DoEvents();
+                    Check("tool_profile_" + name + "_keeps_nominal_drawing", form.DrawingDimensionCount == 7 &&
+                        form.DimensionText("length") == MainForm.F(unsupported.Length) && form.RearWallsClosed &&
+                        form.DrawingLabelsInside && !form.DrawingLabelsOverlap,
+                        new { form.DrawingDimensionCount, length = form.DimensionText("length") });
+                }
                 if (name is "length160" or "stock_bore18" or "second_setup_length20") form.CaptureForm(Path.Combine(folder, "14-unsupported-" + name + ".png"));
             }
             form.SetParameters(Engine.Defaults);

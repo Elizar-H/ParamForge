@@ -243,10 +243,16 @@ internal sealed class MainForm : Form
     private void UpdatePreview()
     {
         var value = ReadParameters(false, false);
-        if (value is not null && Engine.Validate(value).Any(e => inputs.ContainsKey(e.Field))) value = null;
+        if (value is not null && Engine.Validate(value).Any(e => inputs.ContainsKey(e.Field) && !IsSetupLengthError(e))) value = null;
         sketch.Parameters = value;
         sketch.Invalidate();
     }
+
+    // The selected bar/setup can reject a length without making the nominal
+    // part impossible to draw. Generation still validates every process rule.
+    private static bool IsSetupLengthError(ValidationError error) => error.Field == "length" &&
+        (error.Message.StartsWith("Длина обработки превышает", StringComparison.Ordinal) ||
+         error.Message.StartsWith("Недостаточно длины для второго установа", StringComparison.Ordinal));
 
     internal bool GenerateNow()
     {
@@ -277,7 +283,7 @@ internal sealed class MainForm : Form
         status.ForeColor = Theme.Error;
         status.Text = ShortError(invalid);
         tips.SetToolTip(status, string.Join(Environment.NewLine, invalid.Select(e => e.Message)));
-        sketch.Parameters = null;
+        UpdatePreview();
     }
 
     private string ShortError(IReadOnlyList<ValidationError> invalid)
