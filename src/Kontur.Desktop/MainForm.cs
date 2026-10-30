@@ -121,7 +121,7 @@ internal sealed class MainForm : Form
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 365));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
-        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 8));
         form.Controls.Add(Theme.Label("Геометрия", Theme.Strong), 0, 0);
         form.Controls.Add(BuildDimensions(), 0, 1);
@@ -157,7 +157,7 @@ internal sealed class MainForm : Form
         var tolerances = new TabPage("Отклонения") { BackColor = Color.White, Padding = new Padding(4) };
         tabs.TabPages.AddRange([geometry, tolerances]);
         var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = Dimensions.Length, Margin = Padding.Empty };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 29));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 40));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 74));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));

@@ -303,6 +303,7 @@ internal static partial class UiSmoke
             form.SetParameters(Engine.Defaults);
             form.GenerateNow();
             RunV24Checks(form, folder, Check);
+            RunV25Checks(form, folder, Check);
             form.CaptureProcessingDialog(Path.Combine(folder, "07-processing-dialog.png"));
             form.CaptureExportDialog(files, Path.Combine(folder, "08-export-result-dialog.png"));
         }
@@ -320,6 +321,10 @@ internal static partial class UiSmoke
                 CheckCaptions(simulated, "scaled_" + targetDpi, Check);
                 Check("text_scale_simulation_" + targetDpi, simulated.DrawingLabelsInside && !simulated.DrawingLabelsOverlap && simulated.RearWallsClosed && simulated.DrawingLabelsClearOfMaterial && simulated.DrawingBoreDimensionsClearOfMaterial && simulated.DrawingLabelsClearOfRearEdges,
                     new { simulatedDpi = targetDpi, actualWindowsDpi = simulated.DeviceDpi, scope = "application text scaling simulation; Windows DPI settings unchanged" });
+                simulated.SetDrawingOptions(true, true); RenderDrawing(simulated);
+                Check("v25_tolerance_scale_" + targetDpi, simulated.DrawingLabelsInside && !simulated.DrawingLabelsOverlap && simulated.DrawingLabelsClearOfRearEdges && simulated.Sketch.LabelsClearOfDimensionLines, null);
+                simulated.CaptureForm(Path.Combine(folder, $"06-tolerances-simulation-{targetDpi}dpi.png"));
+                simulated.SetDrawingOptions(true, false);
                 foreach (var key in new[] { "length", "flangeDiameter", "bodyDiameter", "flangeWidth", "boreDiameter", "counterboreDiameter", "counterboreDepth" })
                 {
                     var before = JsonSerializer.Serialize(simulated.CurrentProject!);

@@ -43,10 +43,10 @@ internal sealed class ResultInspectionForm : Form
         viewport.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         viewport.RowStyles.Add(new RowStyle(SizeType.Absolute, 38)); viewport.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, BackColor = Color.White, Margin = Padding.Empty };
-        var fit = Theme.Button("Вписать"); fit.Width = 90; fit.Height = 30; fit.Margin = new Padding(0, 2, 8, 2);
+        var fit = Theme.Button("Вписать"); fit.Width = 112; fit.Height = 34; fit.Margin = new Padding(0, 2, 8, 2);
         fit.Click += (_, _) => trajectory.Fit();
         var all = new CheckBox { Text = "Все переходы", AutoSize = true, Margin = new Padding(4, 9, 10, 0) };
-        var rapids = new CheckBox { Text = "Холостые ходы", Checked = true, AutoSize = true, Margin = new Padding(4, 9, 0, 0) };
+        var rapids = new CheckBox { Text = "Холостые", Checked = true, AutoSize = true, Margin = new Padding(4, 9, 0, 0) };
         all.CheckedChanged += (_, _) => { trajectory.ShowAll = all.Checked; trajectory.Invalidate(); };
         rapids.CheckedChanged += (_, _) => { trajectory.ShowRapids = rapids.Checked; trajectory.Invalidate(); };
         toolbar.Controls.AddRange([fit, all, rapids]);
@@ -201,10 +201,10 @@ internal sealed class TrajectoryCanvas : Control
         var p = project.Params; var moves = project.Verification.Moves;
         var minZ = Math.Min(-p.Length, moves.Min(m => m.Z)); var maxZ = Math.Max(10, moves.Max(m => m.Z));
         var maxRadius = Math.Max(p.StockDiameter, moves.Max(m => m.X)) / 2;
-        var availableWidth = Math.Max(1, Width - 80 * u); var availableHeight = Math.Max(1, Height - 100 * u);
+        var availableWidth = Math.Max(1, Width - 80 * u); var availableHeight = Math.Max(1, Height - 60 * u);
         var scale = (float)Math.Min(availableWidth / (maxZ - minZ), availableHeight / maxRadius);
         var left = 40 * u + (availableWidth - (float)(maxZ - minZ) * scale) / 2;
-        var top = 70 * u + (availableHeight - (float)maxRadius * scale) / 2;
+        var top = 20 * u + (availableHeight - (float)maxRadius * scale) / 2;
         PointF Point(double z, double radius)
         {
             var x = left + (float)(z - minZ) * scale; var y = top + (float)(maxRadius - radius) * scale;
@@ -240,6 +240,6 @@ internal sealed class TrajectoryCanvas : Control
             g.FillEllipse(marker, point.X - 3 * u, point.Y - 3 * u, 6 * u, 6 * u);
         }
         WorkCoordinates.Origin(g, Point(0, 0), u);
-        WorkCoordinates.Legend(g, new(28 * u, 48 * u), u);
+        WorkCoordinates.Legend(g, new(26 * u, Height - 18 * u), u);
     }
 }

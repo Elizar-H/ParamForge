@@ -79,11 +79,33 @@ internal static class NativeDocxCards
                 .Select(side => new XElement(W + side, new XAttribute(W + "w", 0), new XAttribute(W + "type", "dxa")))));
             pr.Add(Val("vAlign", "center"));
             var tc = new XElement(W + "tc", pr);
-            if (c.Nested is not null) { tc.Add(c.Nested); tc.Add(P("", 2)); }
+            if (c.Nested is not null)
+            {
+                // Use the actual parent grid width, including its twip rounding.
+                FitNested(c.Nested, (int)pr.Element(W + "tcW")!.Attribute(W + "w")!);
+                tc.Add(c.Nested); tc.Add(P("", 2));
+            }
             else tc.Add(P(c.Text, c.Font, c.Bold, c.Center ? "center" : "left"));
             tr.Add(tc); x += c.Width;
         }
         table.Add(tr);
+    }
+    private static void FitNested(XElement table, int width)
+    {
+        table.Element(W + "tblPr")!.Element(W + "tblW")!.SetAttributeValue(W + "w", width);
+        var columns = table.Element(W + "tblGrid")!.Elements(W + "gridCol").ToArray();
+        for (var i = 0; i < columns.Length; i++) columns[i].SetAttributeValue(W + "w", (i + 1) * width / columns.Length - i * width / columns.Length);
+        foreach (var row in table.Elements(W + "tr"))
+        {
+            var x = 0;
+            foreach (var cell in row.Elements(W + "tc"))
+            {
+                var properties = cell.Element(W + "tcPr")!;
+                var span = (int)properties.Element(W + "gridSpan")!.Attribute(W + "val")!;
+                properties.Element(W + "tcW")!.SetAttributeValue(W + "w", (x + span) * width / columns.Length - x * width / columns.Length);
+                x += span;
+            }
+        }
     }
     private static IEnumerable<XElement> Top(string standard, string form, bool nextPage = false)
     {

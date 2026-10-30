@@ -130,6 +130,7 @@ internal static partial class Program
     private static void RegisterTests()
     {
         RegisterV24Tests();
+        RegisterV25Tests();
         Add("field schema exposes exactly 32 numeric parameters", () =>
         {
             Equal(32, Engine.Fields.Count, "numeric field count");
