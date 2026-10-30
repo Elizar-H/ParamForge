@@ -12,5 +12,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Kontur.Core/Kontur.Core.csproj" />
+    <InternalsVisibleTo Include="Kontur.Desktop.Tests" />
   </ItemGroup>
 </Project>

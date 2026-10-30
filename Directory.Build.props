@@ -4,7 +4,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <Deterministic>true</Deterministic>
-    <Version>2.5.0</Version>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <Version>2.11.0</Version>
     <Authors>Елизар Худяков</Authors>
   </PropertyGroup>
 </Project>
