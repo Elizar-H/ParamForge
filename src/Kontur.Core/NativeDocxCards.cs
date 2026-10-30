@@ -73,6 +73,10 @@ internal static class NativeDocxCards
             var pr = new XElement(W + "tcPr", new XElement(W + "tcW", new XAttribute(W + "w", (x + c.Width) * twips / mm - x * twips / mm), new XAttribute(W + "type", "dxa")), Val("gridSpan", c.Width.ToString(CultureInfo.InvariantCulture)));
             if (c.Merge is not null) pr.Add(Val("vMerge", c.Merge));
             if (c.NoBorders) pr.Add(new XElement(W + "tcBorders", new[] { "top", "left", "bottom", "right" }.Select(side => new XElement(W + side, new XAttribute(W + "val", "nil")))));
+            // A full-width nested form must not inherit the parent's cell padding:
+            // otherwise Word clips its right outside border.
+            if (c.Nested is not null) pr.Add(new XElement(W + "tcMar", new[] { "top", "left", "bottom", "right" }
+                .Select(side => new XElement(W + side, new XAttribute(W + "w", 0), new XAttribute(W + "type", "dxa")))));
             pr.Add(Val("vAlign", "center"));
             var tc = new XElement(W + "tc", pr);
             if (c.Nested is not null) { tc.Add(c.Nested); tc.Add(P("", 2)); }

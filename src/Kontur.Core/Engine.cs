@@ -9,7 +9,7 @@ namespace Kontur.Core;
 /// <summary>Детерминированный расчёт обработки и согласованные карты/УП.</summary>
 public static class Engine
 {
-    public const string Version = "2.4.1";
+    public const string Version = "2.5.0";
     public static Parameters Defaults => new();
     public static IReadOnlyList<FieldDefinition> Fields { get; } = Array.AsReadOnly(new[]
     {
