@@ -1,0 +1,8 @@
+{
+  "controller": "sinumerik840dsl",
+  "boreTolerance": "H7",
+  "counterboreTolerance": "JS8",
+  "flangeTolerance": "h7",
+  "lengthTolerance": "IT8",
+  "counterboreDepthTolerance": "IT7"
+}

@@ -12,6 +12,8 @@ internal sealed class MainForm : Form
     private readonly ToolTip tips = new() { AutoPopDelay = 14000, InitialDelay = 400 };
     private readonly SketchCanvas sketch = new() { Dock = DockStyle.Fill };
     private readonly Button exportButton = Theme.Button("Сформировать документы", true);
+    private readonly ComboBox controllerInput = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+    private ResultInspectionForm? inspection;
     private readonly Label status = Theme.Label("", Theme.Small);
     private readonly System.Windows.Forms.Timer previewTimer = new() { Interval = 180 };
     private Parameters working = Engine.Defaults;
@@ -38,7 +40,7 @@ internal sealed class MainForm : Form
 
     internal MainForm()
     {
-        Text = "ParamForge";
+        Text = "ParamForge " + Engine.Version;
         Name = "ParamForgeMainForm";
         Font = Theme.Body;
         ForeColor = Theme.Ink;
@@ -58,11 +60,17 @@ internal sealed class MainForm : Form
         file.DropDownItems.Add(new ToolStripSeparator());
         file.DropDownItems.Add("Выход", null, (_, _) => Close());
         menu.Items.Add(file);
+        var view = new ToolStripMenuItem("Вид");
+        var axes = new ToolStripMenuItem("Ноль детали и оси") { Checked = true, CheckOnClick = true };
+        var tolerances = new ToolStripMenuItem("Показывать допуски") { CheckOnClick = true };
+        axes.CheckedChanged += (_, _) => { sketch.ShowAxes = axes.Checked; sketch.Invalidate(); };
+        tolerances.CheckedChanged += (_, _) => { sketch.ShowTolerances = tolerances.Checked; sketch.Invalidate(); };
+        view.DropDownItems.AddRange([axes, tolerances]); menu.Items.Add(view);
         MainMenuStrip = menu;
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Padding(18), BackColor = Theme.Surface };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 326));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 20));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.Controls.Add(BuildInputs(), 0, 0);
@@ -80,103 +88,112 @@ internal sealed class MainForm : Form
     private Control BuildInputs()
     {
         var panel = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
-        var footer = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 104, RowCount = 2, ColumnCount = 1, Padding = new Padding(0, 8, 0, 0) };
+        var footer = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 184, RowCount = 4, ColumnCount = 1, Padding = new Padding(0, 8, 0, 0) };
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 49));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         exportButton.Dock = DockStyle.Fill;
         exportButton.FlatAppearance.BorderColor = Theme.Accent;
         exportButton.Click += (_, _) => ExportDialog();
-        footer.Controls.Add(exportButton, 0, 0);
+        controllerInput.Items.AddRange(["AxiOMA Control", "SINUMERIK 840D sl"]);
+        controllerInput.AccessibleName = "Профиль ЧПУ";
+        controllerInput.Font = Theme.Body;
+        controllerInput.SelectedIndexChanged += (_, _) =>
+        {
+            if (loading) return;
+            working = working with { Controller = controllerInput.SelectedIndex == 1 ? CncProfiles.Sinumerik : CncProfiles.Axioma };
+            stale = true; GenerateNow();
+        };
+        footer.Controls.Add(controllerInput, 0, 0);
+        var inspect = Theme.Button("Траектория УП…"); inspect.Dock = DockStyle.Fill;
+        inspect.Click += (_, _) => OpenInspection(); footer.Controls.Add(inspect, 0, 1);
+        footer.Controls.Add(exportButton, 0, 2);
         status.ForeColor = Theme.Muted;
         status.Padding = new Padding(0, 5, 0, 0);
         status.TextAlign = ContentAlignment.TopLeft;
-        footer.Controls.Add(status, 0, 1);
+        footer.Controls.Add(status, 0, 3);
         panel.Controls.Add(footer);
 
         var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(0, 0, 0, 4) };
-        var form = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, RowCount = 7, Padding = Padding.Empty, Margin = Padding.Empty };
+        var form = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, RowCount = 5, Padding = Padding.Empty, Margin = Padding.Empty };
         form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
-        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
-        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 274));
-        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+        form.RowStyles.Add(new RowStyle(SizeType.Absolute, 365));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         form.RowStyles.Add(new RowStyle(SizeType.Absolute, 8));
-        form.Controls.Add(Theme.Label("Размеры детали", Theme.Strong), 0, 0);
-        var hint = Theme.Label("Номинал и отклонения, мм", Theme.Small);
-        hint.ForeColor = Theme.Muted;
-        form.Controls.Add(hint, 0, 1);
-        form.Controls.Add(BuildDimensions(), 0, 2);
-        form.Controls.Add(BuildAssumptions(), 0, 3);
+        form.Controls.Add(Theme.Label("Геометрия", Theme.Strong), 0, 0);
+        form.Controls.Add(BuildDimensions(), 0, 1);
         var processing = Theme.Button("Параметры обработки…");
         processing.Dock = DockStyle.Fill;
         processing.FlatAppearance.BorderColor = Theme.Border;
         processing.Click += (_, _) => OpenProcessing();
-        form.Controls.Add(processing, 0, 4);
-        var targets = new LinkLabel { Text = "Расчётные размеры", Font = Theme.Small, LinkColor = Theme.Accent, ActiveLinkColor = Theme.Ink, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty };
+        form.Controls.Add(processing, 0, 2);
+        var targets = Theme.Button("Расчётные размеры"); targets.Dock = DockStyle.Fill;
         targets.Click += (_, _) => ShowTargets();
-        form.Controls.Add(targets, 0, 5);
+        form.Controls.Add(targets, 0, 3);
         scroll.Controls.Add(form);
         panel.Controls.Add(scroll);
         scroll.BringToFront();
         return panel;
     }
 
+    // The panel is built from parameter descriptors; the current geometry remains a sleeve.
+    private static readonly (string Symbol, string Name, string Key, string? Low, string? High)[] Dimensions =
+    [
+        ("L", "Длина", "length", "lengthLowerDeviation", "lengthUpperDeviation"),
+        ("D", "Диаметр бурта", "flangeDiameter", "flangeLowerDeviation", "flangeUpperDeviation"),
+        ("d", "Диаметр отверстия", "boreDiameter", "boreLowerDeviation", "boreUpperDeviation"),
+        ("d2", "Диаметр расточки", "counterboreDiameter", "counterboreLowerDeviation", "counterboreUpperDeviation"),
+        ("h", "Глубина расточки", "counterboreDepth", "counterboreDepthLowerDeviation", "counterboreDepthUpperDeviation"),
+        ("Db", "Диаметр тела", "bodyDiameter", null, null),
+        ("b", "Ширина бурта", "flangeWidth", null, null)
+    ];
     private Control BuildDimensions()
     {
-        var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 6, Margin = Padding.Empty };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22.5F));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22.5F));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 29));
-        for (var i = 0; i < 5; i++) table.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
-        var headings = new[] { "", "Ном.", "Ниж.", "Верх." };
-        for (var col = 0; col < 4; col++)
+        var tabs = new TabControl { Dock = DockStyle.Fill, Font = Theme.Small, Margin = Padding.Empty };
+        var geometry = new TabPage("Размеры") { BackColor = Color.White, Padding = new Padding(4) };
+        var tolerances = new TabPage("Отклонения") { BackColor = Color.White, Padding = new Padding(4) };
+        tabs.TabPages.AddRange([geometry, tolerances]);
+        var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = Dimensions.Length, Margin = Padding.Empty };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 29));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 74));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
+        for (var row = 0; row < Dimensions.Length; row++)
         {
-            var label = Theme.Label(headings[col], Theme.Small);
-            label.ForeColor = Theme.Muted;
-            table.Controls.Add(label, col, 0);
+            table.RowStyles.Add(new RowStyle(SizeType.Percent, 100F / Dimensions.Length));
+            var d = Dimensions[row];
+            table.Controls.Add(Theme.Label(d.Symbol, Theme.Small), 0, row);
+            var name = Theme.Label(d.Name, Theme.Small); name.Name = "dimension_caption_" + d.Key;
+            table.Controls.Add(name, 1, row);
+            var value = Input(d.Key); value.TextAlign = HorizontalAlignment.Right;
+            table.Controls.Add(value, 2, row);
+            var edit = Theme.Button("±"); edit.Name = "dimension_edit_" + d.Key;
+            edit.AccessibleName = "Изменить размер и допуск: " + d.Name;
+            edit.Dock = DockStyle.Fill; edit.Padding = Padding.Empty; edit.Margin = new Padding(2, 5, 0, 5);
+            tips.SetToolTip(edit, "Размер и допуск"); edit.Click += (_, _) => EditDimension(d.Key);
+            table.Controls.Add(edit, 3, row);
         }
-        var rows = new[]
+        geometry.Controls.Add(table);
+        var deviations = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 6, Margin = Padding.Empty };
+        deviations.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        deviations.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+        deviations.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+        deviations.RowStyles.Add(new RowStyle(SizeType.Absolute, 29));
+        deviations.Controls.Add(Theme.Label("Нижнее", Theme.Small), 1, 0);
+        deviations.Controls.Add(Theme.Label("Верхнее", Theme.Small), 2, 0);
+        var rowIndex = 1;
+        foreach (var d in Dimensions.Where(d => d.Low is not null))
         {
-            ("Длина", "length", "lengthLowerDeviation", "lengthUpperDeviation"),
-            ("Диаметр\nбурта", "flangeDiameter", "flangeLowerDeviation", "flangeUpperDeviation"),
-            ("Диаметр\nотверстия", "boreDiameter", "boreLowerDeviation", "boreUpperDeviation"),
-            ("Диаметр\nрасточки", "counterboreDiameter", "counterboreLowerDeviation", "counterboreUpperDeviation"),
-            ("Глубина\nрасточки", "counterboreDepth", "counterboreDepthLowerDeviation", "counterboreDepthUpperDeviation")
-        };
-        for (var row = 0; row < rows.Length; row++)
-        {
-            var (caption, nominal, low, high) = rows[row];
-            var label = Theme.Label(caption, Theme.Small);
-            label.Name = "dimension_caption_" + nominal;
-            table.Controls.Add(label, 0, row + 1);
-            table.Controls.Add(Input(nominal), 1, row + 1);
-            table.Controls.Add(Input(low), 2, row + 1);
-            table.Controls.Add(Input(high), 3, row + 1);
+            deviations.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+            deviations.Controls.Add(Theme.Label(d.Name, Theme.Small), 0, rowIndex);
+            deviations.Controls.Add(Input(d.Low!), 1, rowIndex);
+            deviations.Controls.Add(Input(d.High!), 2, rowIndex++);
         }
-        return table;
-    }
-
-    private Control BuildAssumptions()
-    {
-        var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2, Margin = new Padding(0, 9, 0, 4) };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 36));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 41));
-        var title = Theme.Label("Дополнительные размеры, мм", Theme.Small);
-        table.Controls.Add(title, 0, 0);
-        table.SetColumnSpan(title, 4);
-        table.Controls.Add(Theme.Label("Db", Theme.Small), 0, 1);
-        table.Controls.Add(Input("bodyDiameter"), 1, 1);
-        table.Controls.Add(Theme.Label("b", Theme.Small), 2, 1);
-        table.Controls.Add(Input("flangeWidth"), 3, 1);
-        return table;
+        tolerances.Controls.Add(deviations);
+        return tabs;
     }
 
     private TextBox Input(string key)
@@ -190,6 +207,9 @@ internal sealed class MainForm : Form
         box.TextChanged += (_, _) =>
         {
             if (loading) return;
+            var dimension = Tolerances.Dimensions.FirstOrDefault(d =>
+                string.Equals(d.LowerProperty, key, StringComparison.OrdinalIgnoreCase) || string.Equals(d.UpperProperty, key, StringComparison.OrdinalIgnoreCase));
+            if (dimension is not null) working = Tolerances.SetDesignation(working, dimension.Key, "");
             stale = true;
             errors.SetError(box, "");
             box.BackColor = Color.White;
@@ -201,7 +221,7 @@ internal sealed class MainForm : Form
     }
 
     private static PropertyInfo Property(string key) => typeof(Parameters).GetProperty(char.ToUpperInvariant(key[0]) + key[1..]) ?? throw new InvalidOperationException(key);
-    internal static string F(double value) => value.ToString("0.###", CultureInfo.GetCultureInfo("ru-RU"));
+    internal static string F(double value) => value.ToString("0.####", CultureInfo.GetCultureInfo("ru-RU"));
     internal static bool TryNumber(string text, out double value) => double.TryParse(text.Trim().Replace(',', '.'), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value) && double.IsFinite(value);
 
     internal void SetParameters(Parameters value)
@@ -211,6 +231,7 @@ internal sealed class MainForm : Form
         try
         {
             working = value;
+            controllerInput.SelectedIndex = value.Controller == CncProfiles.Sinumerik ? 1 : 0;
             errors.Clear();
             foreach (var input in inputs)
             {
@@ -234,6 +255,11 @@ internal sealed class MainForm : Form
         foreach (var input in inputs)
             if (TryNumber(input.Value.Text, out var number)) Property(input.Key).SetValue(result, number);
             else invalid.Add(new(input.Key, "Введите число в выделенном поле."));
+        if (invalid.Count == 0)
+        {
+            try { result = Tolerances.Resolve(result); }
+            catch (ArgumentException ex) { invalid.Add(new("tolerances", ex.Message)); }
+        }
         if (invalid.Count == 0 && validate) invalid.AddRange(Engine.Validate(result));
         if (invalid.Count == 0) return result;
         if (showErrors) ShowErrors(invalid);
@@ -244,8 +270,23 @@ internal sealed class MainForm : Form
     {
         var value = ReadParameters(false, false);
         if (value is not null && Engine.Validate(value).Any(e => inputs.ContainsKey(e.Field) && !IsSetupLengthError(e))) value = null;
+        if (value is not null)
+        {
+            loading = true;
+            try
+            {
+                foreach (var dimension in Tolerances.Dimensions.Where(d => Tolerances.Designation(value, d).Length != 0))
+                    foreach (var property in new[] { dimension.LowerProperty, dimension.UpperProperty })
+                    {
+                        var key = char.ToLowerInvariant(property[0]) + property[1..];
+                        inputs[key].Text = F(Tolerances.Number(value, property));
+                    }
+            }
+            finally { loading = false; }
+        }
         sketch.Parameters = value;
         sketch.Invalidate();
+        if (inspection is { IsDisposed: false }) inspection.SetResult(value is null ? null : Engine.Generate(value).Project);
     }
 
     // The selected bar/setup can reject a length without making the nominal
@@ -261,12 +302,13 @@ internal sealed class MainForm : Form
         if (value is null) return false;
         var result = Engine.Generate(value);
         if (!result.Ok || result.Project is null) { ShowErrors(result.Errors); return false; }
-        working = value;
+        working = result.Project.Params;
         project = result.Project;
         stale = false;
         sketch.Parameters = value;
         status.Text = "";
         errors.Clear();
+        if (inspection is { IsDisposed: false }) inspection.SetResult(project);
         return true;
     }
 
@@ -353,10 +395,29 @@ internal sealed class MainForm : Form
         if (editor.ShowDialog(this) != DialogResult.OK || editor.Result is null) return;
         SetParameters(editor.Result.Params);
         project = editor.Result;
+        if (inspection is { IsDisposed: false }) inspection.SetResult(project);
         stale = false;
         sketch.Parameters = project.Params;
         status.Text = "";
     }
+
+    internal void OpenInspection()
+    {
+        if (!GenerateNow()) return;
+        if (inspection is null || inspection.IsDisposed) inspection = new ResultInspectionForm();
+        inspection.SetResult(project); inspection.Show(this); inspection.Activate();
+    }
+    internal void SetController(string controller)
+    {
+        controllerInput.SelectedIndex = controller == CncProfiles.Sinumerik ? 1 : 0;
+    }
+    internal void SetDrawingOptions(bool axes, bool tolerances)
+    {
+        sketch.ShowAxes = axes; sketch.ShowTolerances = tolerances; sketch.Invalidate();
+    }
+    internal SketchCanvas Sketch => sketch;
+    internal ResultInspectionForm? Inspection => inspection;
+    internal Parameters? ReadForSmoke() => ReadParameters(false);
 
     internal Control DrawingControl => sketch;
     internal RectangleF DimensionHitBounds(string key) => sketch.DimensionHitBounds(key);
@@ -471,6 +532,9 @@ internal sealed class MainForm : Form
         void Collect(Control parent) { controls.Add(parent); foreach (Control child in parent.Controls) Collect(child); }
         Collect(this);
         var originals = controls.Select(c => (Control: c, Font: c.Font)).ToList();
+        var originalSize = ClientSize;
+        Scale(new SizeF(factor, factor));
+        ClientSize = new Size((int)Math.Round(originalSize.Width * factor), (int)Math.Round(originalSize.Height * factor));
         foreach (var item in originals)
         {
             var font = new Font(item.Font.FontFamily, item.Font.Size * factor, item.Font.Style);

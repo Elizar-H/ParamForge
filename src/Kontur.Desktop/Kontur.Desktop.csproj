@@ -8,7 +8,6 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <AssemblyName>ParamForge</AssemblyName>
     <RootNamespace>Kontur.Desktop</RootNamespace>
-    <Version>2.3.0</Version>
     <Description>Подготовка документов токарной обработки</Description>
   </PropertyGroup>
   <ItemGroup>

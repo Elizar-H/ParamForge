@@ -23,7 +23,7 @@ internal static class NativeDocxCards
     private const double RouteBodyMm = 326 * 25.4 / 1440;
     private const double FirstOperationBodyMm = 327 * 25.4 / 1440;
     private const double ContinuedOperationBodyMm = 346 * 25.4 / 1440;
-    private static string F(double n) => n == 0 ? "0" : Engine.Round(n).ToString("0.###", CultureInfo.GetCultureInfo("ru-RU"));
+    private static string F(double n) => n == 0 ? "0" : n.ToString("0.####", CultureInfo.GetCultureInfo("ru-RU"));
     private static string Depth(double n) => n.ToString("0.####", CultureInfo.GetCultureInfo("ru-RU"));
     private static string Sign(double n) => (n > 0 ? "+" : "") + F(n);
     private static string Mark(ref int n, string prefix = "") => prefix + (n++).ToString("D2", CultureInfo.InvariantCulture);
@@ -123,7 +123,12 @@ internal static class NativeDocxCards
     private static void Bottom(XElement t, string code, string title, int page) => Row(t, 7,
         [new(22, code, true, true, 24), new(230, title, Font: 22), new(20, page.ToString(CultureInfo.InvariantCulture), true, Font: 20)]);
     private static void TextRow(XElement t, string mark, string text, double height = RouteBodyMm) => Row(t, height, [new(12, mark, true), new(260, text)]);
-    private static string Nominals(Parameters p) => $"Номиналы и отклонения (ниж./верх.), мм: d {F(p.BoreDiameter)} ({Sign(p.BoreLowerDeviation)}/{Sign(p.BoreUpperDeviation)}); d2 {F(p.CounterboreDiameter)} ({Sign(p.CounterboreLowerDeviation)}/{Sign(p.CounterboreUpperDeviation)}); D {F(p.FlangeDiameter)} ({Sign(p.FlangeLowerDeviation)}/{Sign(p.FlangeUpperDeviation)}); L {F(p.Length)} ({Sign(p.LengthLowerDeviation)}/{Sign(p.LengthUpperDeviation)}); h {F(p.CounterboreDepth)} ({Sign(p.CounterboreDepthLowerDeviation)}/{Sign(p.CounterboreDepthUpperDeviation)}).";
+    private static string Designation(Parameters p, string key) {
+        var d = Tolerances.Dimensions.Single(d => d.Key == key);
+        var text = Tolerances.Designation(p, d);
+        return text.Length == 0 ? "" : " " + text;
+    }
+    private static string Nominals(Parameters p) => $"Номиналы и отклонения (ниж./верх.), мм: d {F(p.BoreDiameter)}{Designation(p, "boreDiameter")} ({Sign(p.BoreLowerDeviation)}/{Sign(p.BoreUpperDeviation)}); d2 {F(p.CounterboreDiameter)}{Designation(p, "counterboreDiameter")} ({Sign(p.CounterboreLowerDeviation)}/{Sign(p.CounterboreUpperDeviation)}); D {F(p.FlangeDiameter)}{Designation(p, "flangeDiameter")} ({Sign(p.FlangeLowerDeviation)}/{Sign(p.FlangeUpperDeviation)}); L {F(p.Length)}{Designation(p, "length")} ({Sign(p.LengthLowerDeviation)}/{Sign(p.LengthUpperDeviation)}); h {F(p.CounterboreDepth)}{Designation(p, "counterboreDepth")} ({Sign(p.CounterboreDepthLowerDeviation)}/{Sign(p.CounterboreDepthUpperDeviation)}).";
     private static string Targets(Calculations c) => $"Расчётные цели, мм: d {F(c.TargetBoreDiameter)}; d2 {F(c.TargetCounterboreDiameter)}; D {F(c.TargetFlangeDiameter)}; L {F(c.TargetLength)}; h {F(c.TargetCounterboreDepth)}. Цели — середины полей допуска.";
 
     private static string GeneralAcceptance(Parameters p)
@@ -167,7 +172,7 @@ internal static class NativeDocxCards
         var texts = new Dictionary<string, string>
         {
             ["005"] = $"Принять полый полуфабрикат Ø{F(p.StockDiameter)}/Ø{F(p.StockBore)} × {F(c.RawStockLength)}; подрезать первый торец на {F(p.FrontFacingAllowance)} до {F(c.StockLength)} мм.",
-            ["010"] = $"Зажим {F(p.GripLength)} мм; кулачки Z{F(c.JawsFrontZ)}; обработка до Z{F(c.PartingFrontZ)}. Точить буртик, тело и отверстия; непрерывная СОЖ. УП 010.",
+            ["010"] = $"Зажим {F(p.GripLength)} мм; кулачки Z{F(c.JawsFrontZ)}; обработка до Z{F(c.PartingFrontZ)}. Точить буртик, тело и отверстия; непрерывная СОЖ. УП {project.NcFileName}.",
             ["020"] = $"Отрезать в полосе Z{F(c.PartingFrontZ)}…{F(c.PartingBackZ)} мм (рез {F(c.CutoffWidth)} мм); коридор до кулачков {F(p.ChuckClearance)} мм. Вне УП.",
             ["030"] = "Контролировать размеры по указанным отклонениям; h — от первого торца на плоской части уступа вне галтели."
         };
@@ -175,10 +180,10 @@ internal static class NativeDocxCards
         foreach (var op in project.Operations)
         {
             var name = op.Code switch { "005" => "Подготовка заготовки", "010" => "Токарная с ЧПУ", "020" => "Отделение и доводка", "030" => "Контроль", _ => op.Title };
-            var av = new[] { Mark(ref n, "А"), "", "", "", op.Code, name, op.Code == "010" ? "ОК 010; УП " + project.Id : "" };
+            var av = new[] { Mark(ref n, "А"), "", "", "", op.Code, name, op.Code == "010" ? "ОК 010; УП " + project.ProgramName : "" };
             Row(card, RouteBodyMm, aw.Select((w, i) => new Cell(w, av[i], i is 0 or 4)));
             var bv = new string[bw.Length]; Array.Fill(bv, ""); bv[0] = Mark(ref n, "Б");
-            bv[1] = op.Code switch { "010" => "Токарный с ЧПУ AxiOMA Control", "005" or "020" => "Токарный, наладочный режим", _ => "Контрольное место" };
+            bv[1] = op.Code switch { "010" => "Токарный с ЧПУ " + CncProfiles.Name(p.Controller), "005" or "020" => "Токарный, наладочный режим", _ => "Контрольное место" };
             Row(card, RouteBodyMm, bw.Select((w, i) => new Cell(w, bv[i], i == 0)));
             TextRow(card, Mark(ref n, "О"), texts.GetValueOrDefault(op.Code, op.Description));
             if (op.Code == "010") TextRow(card, Mark(ref n, "Т"), $"T1/D1 {ToolingProfile.ExternalTool}; T2/D1 {ToolingProfile.BoringTool}; {ToolingProfile.Insert}, R{F(ToolingProfile.NoseRadius)}.");
@@ -210,7 +215,7 @@ internal static class NativeDocxCards
             Row(t, 8, widths.Select((w, i) => new Cell(w, values[i], true)), true);
             widths = [75, 60, 18, 18, 18, 18, 65]; labels = ["Оборудование, устройство ЧПУ", "Обозначение программы", "То", "Тв", "Тпз", "Тшт.", "СОЖ"];
             Row(t, 4, widths.Select((w, i) => new Cell(w, labels[i], true, Font: 14)), true);
-            values = ["ЧПУ AxiOMA Control", project.Id, "", "", "", "", "Эмульсия, непрерывно (M8)"];
+            values = ["ЧПУ " + CncProfiles.Name(p.Controller), project.Params.Controller == CncProfiles.Sinumerik ? project.NcFileName : project.ProgramName, "", "", "", "", "Эмульсия, непрерывно (M8)"];
             Row(t, 10, widths.Select((w, i) => new Cell(w, values[i], true)), true);
         }
         string[] rh = ["Р", "", "ПИ", "D или B", "L", "t", "i", "S", "n", "V"];

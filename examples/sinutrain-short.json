@@ -1,0 +1,9 @@
+{
+  "controller": "sinumerik840dsl",
+  "length": 80,
+  "flangeDiameter": 100,
+  "bodyDiameter": 84,
+  "flangeWidth": 8,
+  "counterboreDepth": 10,
+  "stockDiameter": 104
+}

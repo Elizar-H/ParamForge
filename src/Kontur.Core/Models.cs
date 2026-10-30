@@ -3,6 +3,13 @@ namespace Kontur.Core;
 /// <summary>Параметры детали, заготовки и обработки.</summary>
 public record Parameters
 {
+    public string Controller { get; init; } = CncProfiles.Axioma;
+    // Empty designation means explicitly entered numerical deviations.
+    public string LengthTolerance { get; init; } = "";
+    public string FlangeTolerance { get; init; } = "";
+    public string BoreTolerance { get; init; } = "";
+    public string CounterboreTolerance { get; init; } = "";
+    public string CounterboreDepthTolerance { get; init; } = "";
     public string PartName { get; init; } = "Втулка с буртиком";
     public string Material { get; init; } = "Сталь 45";
     public double Length { get; init; } = 116;
@@ -91,6 +98,8 @@ public record ParsedMove(double X, double Z, string Mode, int Line, double? Feed
 public record VerificationResult(bool Ok, List<string> Errors, List<string> Warnings, List<ParsedMove> Moves, double CutMinutes);
 public record Project
 {
+    public string NcFileName { get; init; } = "Управляющая программа.nc";
+    public string ProgramName { get; init; } = "";
     public string Id { get; init; } = "";
     public string Version { get; init; } = Engine.Version;
     public Parameters Params { get; init; } = new();

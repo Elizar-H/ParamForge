@@ -5,7 +5,7 @@ using Kontur.Core;
 
 namespace Kontur.Desktop;
 
-internal static class UiSmoke
+internal static partial class UiSmoke
 {
     internal static void Run(string folder)
     {
@@ -72,7 +72,7 @@ internal static class UiSmoke
                 Check("tool_profile_" + name + "_export_blocked", blocked && !Directory.Exists(blockedPath));
                 if (name is "length160" or "length250" or "stock_bore18" or "holder_clearance" or "grip15" or "chuck_clearance5" or "second_setup_length20")
                 {
-                    form.Refresh(); Application.DoEvents();
+                    form.Refresh(); Application.DoEvents(); RenderDrawing(form);
                     Check("tool_profile_" + name + "_keeps_nominal_drawing", form.DrawingDimensionCount == 7 &&
                         form.DimensionText("length") == MainForm.F(unsupported.Length) && form.RearWallsClosed &&
                         form.DrawingLabelsInside && !form.DrawingLabelsOverlap,
@@ -142,7 +142,7 @@ internal static class UiSmoke
                 ("flangeWidth", 14D), ("boreDiameter", 48D), ("counterboreDiameter", 76D), ("counterboreDepth", 32D) };
             foreach (var (key, nominal) in edits)
             {
-                form.SetParameters(Engine.Defaults); form.GenerateNow(); form.Refresh(); Application.DoEvents();
+                form.SetParameters(Engine.Defaults); form.GenerateNow(); form.Refresh(); Application.DoEvents(); RenderDrawing(form);
                 var before = form.CurrentProject!.Params;
                 var bounds = form.DimensionHitBounds(key);
                 Check("hit_area_" + key, bounds.Width >= 28 && bounds.Height >= 28 && form.HitDimension(Point.Round(new PointF(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2))) == key, bounds);
@@ -156,7 +156,7 @@ internal static class UiSmoke
                 Check("canvas_edit_" + key + "_syncs_and_keeps_other_values",
                     !form.IsStale && form.GetInput(key) == MainForm.F(nominal) && SameOtherParameters(before, after, key), after);
             }
-            form.SetParameters(Engine.Defaults); form.GenerateNow(); form.Refresh(); Application.DoEvents();
+            form.SetParameters(Engine.Defaults); form.GenerateNow(); form.Refresh(); Application.DoEvents(); RenderDrawing(form);
             Check("seven_nominal_dimension_labels", form.DrawingDimensionCount == 7 && edits.All(pair =>
                 form.DimensionText(pair.Item1) == ((pair.Item1 is "bodyDiameter" or "flangeDiameter" or "boreDiameter" or "counterboreDiameter") ? "⌀" : "") + MainForm.F((double)typeof(Parameters).GetProperty(char.ToUpperInvariant(pair.Item1[0]) + pair.Item1[1..])!.GetValue(Engine.Defaults)!)));
             var beforeEditor = JsonSerializer.Serialize(form.CurrentProject!);
@@ -181,7 +181,7 @@ internal static class UiSmoke
                 PressDialogKey(editor, Keys.Enter);
             });
             Check("canvas_tolerance_edit_recalculates_target", !form.IsStale && form.CurrentProject!.Calculations.TargetBoreDiameter == 48.2 && form.GetInput("boreLowerDeviation") == "-0,1" && form.GetInput("boreUpperDeviation") == "0,5");
-            form.SetParameters(Engine.Defaults); form.GenerateNow(); form.Refresh(); Application.DoEvents();
+            form.SetParameters(Engine.Defaults); form.GenerateNow(); form.Refresh(); Application.DoEvents(); RenderDrawing(form);
             beforeEditor = JsonSerializer.Serialize(form.CurrentProject!);
             foreach (var (name, key, text, error) in new[] { ("not_number", "length", "abc", "Введите число."), ("geometry", "flangeDiameter", "90", "Для чертежа нужно Db < D.") })
             {
@@ -207,7 +207,7 @@ internal static class UiSmoke
                 CaptureDialog(editor, Path.Combine(folder, "15-editor-tool-limit.png"));
                 PressDialogKey(editor, Keys.Escape);
             });
-            form.Size = new Size(1100, 720); form.Refresh(); Application.DoEvents();
+            form.Size = new Size(1100, 720); form.Refresh(); Application.DoEvents(); RenderDrawing(form);
             EditByCanvasClick(form, "counterboreDiameter", editor =>
             {
                 editor.NominalInput.Text = "76"; PressDialogKey(editor, Keys.Enter);
@@ -302,12 +302,13 @@ internal static class UiSmoke
                 File.ReadAllText(repeated[2]).Contains("L 117.5", StringComparison.Ordinal), repeated);
             form.SetParameters(Engine.Defaults);
             form.GenerateNow();
+            RunV24Checks(form, folder, Check);
             form.CaptureProcessingDialog(Path.Combine(folder, "07-processing-dialog.png"));
             form.CaptureExportDialog(files, Path.Combine(folder, "08-export-result-dialog.png"));
         }
         catch (Exception ex) { failures.Add(ex.ToString()); }
 
-        foreach (var targetDpi in new[] { 96, 120, 144 })
+        foreach (var targetDpi in new[] { 96, 120, 144, 192 })
         {
             try
             {
@@ -316,6 +317,7 @@ internal static class UiSmoke
                 Application.DoEvents();
                 simulated.SimulateDpiText(targetDpi);
                 simulated.CaptureForm(Path.Combine(folder, $"06-text-scale-simulation-{targetDpi}dpi.png"));
+                CheckCaptions(simulated, "scaled_" + targetDpi, Check);
                 Check("text_scale_simulation_" + targetDpi, simulated.DrawingLabelsInside && !simulated.DrawingLabelsOverlap && simulated.RearWallsClosed && simulated.DrawingLabelsClearOfMaterial && simulated.DrawingBoreDimensionsClearOfMaterial && simulated.DrawingLabelsClearOfRearEdges,
                     new { simulatedDpi = targetDpi, actualWindowsDpi = simulated.DeviceDpi, scope = "application text scaling simulation; Windows DPI settings unchanged" });
                 foreach (var key in new[] { "length", "flangeDiameter", "bodyDiameter", "flangeWidth", "boreDiameter", "counterboreDiameter", "counterboreDepth" })
@@ -345,7 +347,7 @@ internal static class UiSmoke
         var expected = new Dictionary<string, string>
         {
             ["length"] = "Длина", ["flangeDiameter"] = "Диаметр бурта", ["boreDiameter"] = "Диаметр отверстия",
-            ["counterboreDiameter"] = "Диаметр расточки", ["counterboreDepth"] = "Глубина расточки"
+            ["counterboreDiameter"] = "Диаметр расточки", ["counterboreDepth"] = "Глубина расточки", ["bodyDiameter"] = "Диаметр тела", ["flangeWidth"] = "Ширина бурта"
         };
         var evidence = labels.Select(label => new
         {
@@ -354,7 +356,7 @@ internal static class UiSmoke
             measuredWidth = label.Text.Split('\n').Max(line => TextRenderer.MeasureText(line, label.Font).Width),
             measuredHeight = TextRenderer.MeasureText(label.Text, label.Font).Height
         }).ToArray();
-        check(name + "_full_dimension_captions_fit", evidence.Length == 5 && evidence.All(item =>
+        check(name + "_full_dimension_captions_fit", evidence.Length == 7 && evidence.All(item =>
             expected.GetValueOrDefault(item.key) == item.text && item.measuredWidth <= item.availableWidth && item.measuredHeight <= item.availableHeight), evidence);
     }
     private static void CheckButtonPair(string name, Button first, Button second, Action<string, bool, object?> check)
@@ -374,6 +376,7 @@ internal static class UiSmoke
 
     private static void RenderDrawing(MainForm form)
     {
+        form.PerformLayout(); form.Refresh(); Application.DoEvents();
         var drawing = form.DrawingControl;
         using var bitmap = new Bitmap(drawing.Width, drawing.Height);
         drawing.DrawToBitmap(bitmap, new Rectangle(Point.Empty, drawing.Size));

@@ -16,8 +16,8 @@ public static class ProjectFiles
         PropertyNameCaseInsensitive = false
     };
     private static readonly UTF8Encoding Utf8 = new(false, true);
-    private static readonly HashSet<string> ParameterKeys = ["partName", "material", .. Engine.Fields.Select(f => f.Key)];
-    private static readonly HashSet<string> ProjectKeys = ["schema", "engineVersion", "id", "version", "params", "geometry", "calculations", "operations", "transitions", "moves", "nc", "routeHtml", "technologyHtml", "warnings", "verification"];
+    private static readonly HashSet<string> ParameterKeys = ["partName", "material", "controller", "lengthTolerance", "flangeTolerance", "boreTolerance", "counterboreTolerance", "counterboreDepthTolerance", .. Engine.Fields.Select(f => f.Key)];
+    private static readonly HashSet<string> ProjectKeys = ["schema", "engineVersion", "id", "version", "ncFileName", "programName", "params", "geometry", "calculations", "operations", "transitions", "moves", "nc", "routeHtml", "technologyHtml", "warnings", "verification"];
 
     public static Parameters ImportParameters(string path)
     {
@@ -59,7 +59,7 @@ public static class ProjectFiles
             CheckKeys(root, ParameterKeys);
             foreach (var property in root.EnumerateObject())
             {
-                if (property.Name is "partName" or "material")
+                if (property.Name is "partName" or "material" or "controller" || property.Name.EndsWith("Tolerance", StringComparison.Ordinal))
                 { if (property.Value.ValueKind != JsonValueKind.String) throw new InvalidDataException("Параметр " + property.Name + " должен быть строкой."); }
                 else if (property.Value.ValueKind != JsonValueKind.Number || !property.Value.TryGetDouble(out var number) || !double.IsFinite(number))
                     throw new InvalidDataException("Параметр " + property.Name + " должен быть конечным числом JSON.");
@@ -67,7 +67,7 @@ public static class ProjectFiles
             var p = root.Deserialize<Parameters>(JsonOptions) ?? throw new InvalidDataException("Не удалось прочитать параметры.");
             var errors = Engine.Validate(p);
             if (errors.Count != 0) throw new InvalidDataException(string.Join(Environment.NewLine, errors.Select(e => e.Field + ": " + e.Message)));
-            return p;
+            return Tolerances.Resolve(p);
         }
         catch (JsonException ex) { throw new InvalidDataException("Некорректный JSON: " + ex.Message, ex); }
         catch (DecoderFallbackException ex) { throw new InvalidDataException("Файл должен быть в кодировке UTF-8.", ex); }
@@ -87,7 +87,7 @@ public static class ProjectFiles
             if (!allowed.Contains(property.Name)) throw new InvalidDataException("Неизвестный параметр или поле: " + property.Name);
     }
 
-    private static object ParameterDocument(Project p) => new { schema = "kontur-project-v2", engineVersion = p.Version, id = p.Id, @params = p.Params };
+    private static object ParameterDocument(Project p) => new { schema = "kontur-project-v3", engineVersion = p.Version, id = p.Id, @params = p.Params };
     private static string Json(object value) => JsonSerializer.Serialize(value, JsonOptions) + "\n";
 
     public static void SaveParameters(Project project, string path)
@@ -133,7 +133,7 @@ public static class ProjectFiles
         {
             ("Маршрутная карта.docx", NativeDocxCards.Route(project)),
             ("Технологическая карта.docx", NativeDocxCards.Technology(project)),
-            ("Управляющая программа.nc", Utf8.GetBytes(project.Nc))
+            (project.NcFileName, Utf8.GetBytes(project.Nc))
         };
         if (Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder).Any())
             throw new IOException("Папка для нового комплекта должна быть пустой. Существующие файлы не изменены.");

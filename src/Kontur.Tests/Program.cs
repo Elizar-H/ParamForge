@@ -11,7 +11,7 @@ using Kontur.Core;
 
 namespace Kontur.Tests;
 
-internal static class Program
+internal static partial class Program
 {
     private static readonly List<(string Name, Action Body)> Tests = [];
     private static readonly Dictionary<string, object?> Evidence = [];
@@ -129,6 +129,7 @@ internal static class Program
 
     private static void RegisterTests()
     {
+        RegisterV24Tests();
         Add("field schema exposes exactly 32 numeric parameters", () =>
         {
             Equal(32, Engine.Fields.Count, "numeric field count");
@@ -752,11 +753,11 @@ internal static class Program
         double rpm = 0, minutes = 0;
         foreach (var raw in nc.Split('\n'))
         {
-            var line = Regex.Replace(raw, @"\([^()]*\)", "").Trim();
+            var line = Regex.Replace(raw, @"\([^()]*\)", "").Split(';')[0].Trim();
             if (line.Length == 0 || line.StartsWith("%", StringComparison.Ordinal)) continue;
             var words = Regex.Matches(line.ToUpperInvariant(), @"([A-Z])([+-]?(?:\d+(?:\.\d*)?|\.\d+))")
                 .Select(m => (Letter: m.Groups[1].Value, Number: double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture))).ToArray();
-            if (words.Any(w => w.Letter == "M" && w.Number is 6 or 66)) previous = null;
+            if (words.Any(w => w.Letter == "T")) previous = null;
             var speed = words.FirstOrDefault(w => w.Letter == "S");
             if (speed.Letter is not null) rpm = speed.Number;
             var motion = words.FirstOrDefault(w => w.Letter == "G" && w.Number is 0 or 1);
@@ -1207,16 +1208,17 @@ internal static class Program
         var parameters = input is null ? Engine.Defaults : ProjectFiles.ImportParameters(input);
         var p = Generated(parameters);
         var files = ProjectFiles.Export(p, directory);
-        CheckExportFiles(directory, files);
+        CheckExportFiles(directory, files, p.NcFileName);
         CheckDocx(files.Single(f => Path.GetFileName(f) == "Маршрутная карта.docx"), p, route: true);
         CheckDocx(files.Single(f => Path.GetFileName(f) == "Технологическая карта.docx"), p, route: false);
         Evidence["export"] = new { directory, input, p.Id, files };
     }
-    private static void CheckExportFiles(string directory, IReadOnlyList<string> files)
+    private static void CheckExportFiles(string directory, IReadOnlyList<string> files, string ncName = "Управляющая программа.nc")
     {
         Equal(3, files.Count, "exact export file count");
-        Sequence(ExportNames.Order(StringComparer.Ordinal), files.Select(Path.GetFileName).Order(StringComparer.Ordinal));
-        Sequence(ExportNames.Order(StringComparer.Ordinal), Directory.GetFileSystemEntries(directory).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        string[] expectedNames = ["Маршрутная карта.docx", "Технологическая карта.docx", ncName];
+        Sequence(expectedNames.Order(StringComparer.Ordinal), files.Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Sequence(expectedNames.Order(StringComparer.Ordinal), Directory.GetFileSystemEntries(directory).Select(Path.GetFileName).Order(StringComparer.Ordinal));
         foreach (var file in files)
         {
             Equal(Path.GetFullPath(directory), Path.GetDirectoryName(Path.GetFullPath(file)), "export path belongs to the selected directory");
@@ -1413,7 +1415,7 @@ internal static class Program
         foreach (var raw in nc.Split('\n'))
         {
             var line = raw.Trim();
-            var tag = Regex.Match(line, @"^\(TR (010\.\d{2}) ");
+            var tag = Regex.Match(line, @"^(?:\(|;\s*)TR (010\.\d{2}) ");
             if (tag.Success)
             {
                 transition = tag.Groups[1].Value;
@@ -1424,7 +1426,7 @@ internal static class Program
                 .Select(m => (Letter: m.Groups[1].Value, Number: double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture))).ToArray();
             var speed = words.FirstOrDefault(word => word.Letter == "S");
             if (speed.Letter is not null) rpm = speed.Number;
-            if (words.Any(word => word.Letter == "M" && word.Number is 6 or 66))
+            if (words.Any(word => word.Letter == "T"))
             {
                 var selection = words.Single(word => word.Letter == "T").Number;
                 Check(selection == Math.Floor(selection) && selection is 1 or 2, "NC tool selection is an explicit known tool");

@@ -7,10 +7,10 @@ internal static class HtmlCards
 {
     private const string Style = "body{font-family:Arial,sans-serif;max-width:1120px;margin:28px auto;padding:0 20px;color:#182a35;line-height:1.45}h1{font-size:25px}h2{font-size:18px;margin-top:24px}table{border-collapse:collapse;width:100%;font-size:12px;margin:14px 0}th,td{border:1px solid #bcc9cf;padding:7px;text-align:left;vertical-align:top}th{background:#eaf1f3}.warning{border-left:4px solid #b86d1c;background:#fff5e5;padding:12px}@media print{body{margin:0;padding:0;font-size:11px}h1{font-size:20px}thead{display:table-header-group}tr{break-inside:avoid}h2{break-after:avoid}@page{size:A4 landscape;margin:14mm}}";
     private static string Esc(string value) => value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;").Replace("'", "&#39;");
-    private static string F(double value) => Engine.Round(value).ToString("0.###", CultureInfo.GetCultureInfo("ru-RU"));
+    private static string F(double value) => value.ToString("0.####", CultureInfo.GetCultureInfo("ru-RU"));
     private static string Signed(double value) => (value > 0 ? "+" : "") + F(value);
     private static string Document(string title, string body) => "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>" + Esc(title) + "</title><style>" + Style + "</style></head><body>" + body + "</body></html>";
-    private static string Header(Project p, string title) => $"<h1>{Esc(title)}</h1><p><strong>{Esc(p.Params.PartName)}</strong> · {Esc(p.Id)} · версия генератора {Esc(p.Version)}</p><p>Материал: {Esc(p.Params.Material)}. X — диаметр; мм; Z0 — правый торец.</p>";
+    private static string Header(Project p, string title) => $"<h1>{Esc(title)}</h1><p><strong>{Esc(p.Params.PartName)}</strong>; {Esc(p.Id)}; версия генератора {Esc(p.Version)}</p><p>Материал: {Esc(p.Params.Material)}. X — диаметр; мм; Z0 — правый торец. ЧПУ: {Esc(CncProfiles.Name(p.Params.Controller))}; УП {Esc(p.NcFileName)}.</p>";
 
     private static IEnumerable<(string Name, double Nominal, double Lower, double Upper, double Target)> Dimensions(Parameters p, Calculations c)
     {
@@ -32,14 +32,14 @@ internal static class HtmlCards
     {
         var rows = string.Concat(Dimensions(project.Params, project.Calculations).Select(d =>
             $"<tr><td>{Esc(d.Name)}</td><td>{F(d.Nominal)}</td><td>{Signed(d.Lower)} / {Signed(d.Upper)}</td><td>{F(d.Nominal + d.Lower)} … {F(d.Nominal + d.Upper)}</td><td>{F(d.Target)}</td></tr>"));
-        return "<h2>Номиналы, допуски и расчётные цели</h2><p>Все размеры в мм. Цель — середина поля допуска с округлением до 0,001 мм.</p><table><thead><tr><th>Размер</th><th>Номинал</th><th>Нижнее / верхнее отклонения</th><th>Границы</th><th>Расчётная цель</th></tr></thead><tbody>" + rows + "</tbody></table>";
+        return "<p>" + Esc(Kontur.Core.Tolerances.Description(project.Params)) + "</p><h2>Номиналы, допуски и расчётные цели</h2><p>Все размеры в мм. Цель — середина поля допуска с округлением до 0,001 мм.</p><table><thead><tr><th>Размер</th><th>Номинал</th><th>Нижнее / верхнее отклонения</th><th>Границы</th><th>Расчётная цель</th></tr></thead><tbody>" + rows + "</tbody></table>";
     }
     private static string ParametersTable(Parameters p) => "<h2>Исходные параметры</h2><table><thead><tr><th>Параметр</th><th>Значение</th><th>Назначение</th></tr></thead><tbody>" +
         string.Concat(Engine.Fields.Select(f => $"<tr><td>{Esc(f.Label)}</td><td>{F(Engine.Number(p, f.Key))} {Esc(f.Unit)}</td><td>{Esc(f.Note)}</td></tr>")) + "</tbody></table>";
 
     internal static string Route(Project project)
     {
-        var table = string.Concat(project.Operations.Select(o => $"<tr><td>{Esc(o.Code)}</td><td>{Esc(o.Title)}</td><td>{Esc(o.Description)}</td><td>{(o.Kind == "nc" ? "УП " + Esc(project.Id) : "Вне УП")}</td></tr>"));
+        var table = string.Concat(project.Operations.Select(o => $"<tr><td>{Esc(o.Code)}</td><td>{Esc(o.Title)}</td><td>{Esc(o.Description)}</td><td>{(o.Kind == "nc" ? "УП " + Esc(project.ProgramName) : "Вне УП")}</td></tr>"));
         return Document("Маршрутная карта " + project.Id, Header(project, "Маршрутная карта") +
             "<table><thead><tr><th>Операция</th><th>Наименование</th><th>Содержание и оснащение</th><th>Связь с УП</th></tr></thead><tbody>" + table + "</tbody></table>" + Tolerances(project) + ParametersTable(project.Params));
     }

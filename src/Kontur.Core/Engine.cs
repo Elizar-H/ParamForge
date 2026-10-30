@@ -9,7 +9,7 @@ namespace Kontur.Core;
 /// <summary>Детерминированный расчёт обработки и согласованные карты/УП.</summary>
 public static class Engine
 {
-    public const string Version = "2.3.0";
+    public const string Version = "2.4.1";
     public static Parameters Defaults => new();
     public static IReadOnlyList<FieldDefinition> Fields { get; } = Array.AsReadOnly(new[]
     {
@@ -68,7 +68,7 @@ public static class Engine
     };
 
     internal static double Round(double value) => Math.Round(value, 3, MidpointRounding.AwayFromZero);
-    internal static string Fmt(double value) => Round(value).ToString("0.###", CultureInfo.InvariantCulture);
+    internal static string Fmt(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
     // Inputs are validated to three decimal places. Decimal keeps an exact half-micron
     // midpoint from falling below its tie through binary floating-point addition.
     internal static double Target(double nominal, double lower, double upper) =>
@@ -96,6 +96,10 @@ public static class Engine
     public static List<ValidationError> Validate(Parameters p)
     {
         var errors = new List<ValidationError>();
+        if (!CncProfiles.Supported(p.Controller)) errors.Add(new("controller", "Неизвестный профиль ЧПУ."));
+        try { p = Tolerances.Resolve(p); }
+        catch (ArgumentException ex) { errors.Add(new("tolerances", ex.Message)); }
+        if (errors.Count != 0) return errors;
         void Error(string field, string message) => errors.Add(new(field, message));
         foreach (var (key, label, value, maximum) in new[]
         {
@@ -109,14 +113,24 @@ public static class Engine
             var v = Number(p, f.Key);
             if (!double.IsFinite(v)) Error(f.Key, f.Label + ": требуется конечное число.");
             else if (v < f.Min || v > f.Max) Error(f.Key, $"{f.Label}: диапазон {Fmt(f.Min)}–{Fmt(f.Max)} {f.Unit}.");
-            else if ((decimal)v != Math.Round((decimal)v, 3, MidpointRounding.AwayFromZero))
-                Error(f.Key, f.Label + ": не более трёх знаков после запятой.");
+            else
+            {
+                var precision = f.Key.EndsWith("Deviation", StringComparison.Ordinal) ? 4 : 3;
+                if ((decimal)v != Math.Round((decimal)v, precision, MidpointRounding.AwayFromZero))
+                    Error(f.Key, f.Label + (precision == 4 ? ": не более четырёх знаков после запятой." : ": не более трёх знаков после запятой."));
+            }
         }
         if (errors.Count != 0) return errors;
         void Tolerance(string field, double nominal, double lower, double upper)
         {
             if (upper < lower) Error(field, "Верхнее отклонение не должно быть меньше нижнего.");
             if (nominal + lower <= 0) Error(field, "Нижняя граница размера должна быть положительной.");
+            if (upper >= lower)
+            {
+                var target = (decimal)Target(nominal, lower, upper);
+                if (target < (decimal)nominal + (decimal)lower || target > (decimal)nominal + (decimal)upper)
+                    Error(field, "В интервал допуска не попадает целевой размер, округлённый до 0,001 мм.");
+            }
         }
         Tolerance("boreUpperDeviation", p.BoreDiameter, p.BoreLowerDeviation, p.BoreUpperDeviation);
         Tolerance("counterboreUpperDeviation", p.CounterboreDiameter, p.CounterboreLowerDeviation, p.CounterboreUpperDeviation);
@@ -197,6 +211,7 @@ public static class Engine
     {
         var p = parameters ?? Defaults;
         var errors = Validate(p);
+        if (errors.Count == 0) p = Tolerances.Resolve(p);
         if (errors.Count > 0) return new(false, errors, [], null);
         var c = Calculate(p);
         var id = "V-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Version + "|" + JsonSerializer.Serialize(p, ProjectFiles.JsonOptions))))[..16];
@@ -222,33 +237,24 @@ public static class Engine
         };
         var transitions = new List<Transition>();
         var moves = new List<Move>();
-        var lines = new List<string>
-        {
-            $"% {id}",
-            $"(PARAMFORGE {Version} - {id})",
-            "(NOT VERIFIED ON A MACHINE)",
-            "(AXIOMA CONTROL - MM - X DIAMETER - OPERATION 010 ONLY)",
-            $"(TOOL OFFSETS: VIRTUAL SHARP TIP - NOSE R{Fmt(ToolingProfile.NoseRadius)})",
-            $"(TARGETS D {Fmt(c.TargetFlangeDiameter)} d {Fmt(c.TargetBoreDiameter)} d2 {Fmt(c.TargetCounterboreDiameter)} L {Fmt(c.TargetLength)} h {Fmt(c.TargetCounterboreDepth)})"
-        };
-        var line = 0;
+        var instructions = new List<NcInstruction>();
+        void Emit(NcInstructionKind kind, int tool = 0, double value = 0, string text = "") =>
+            instructions.Add(new(kind, Tool: tool, Value: value, Text: text));
         (double X, double Z)? position = null;
         var activeTool = 0;
-        int Emit(string text) { line += 10; lines.Add("N" + line.ToString(CultureInfo.InvariantCulture) + " " + text); return line; }
         void Move(string mode, double x, double z, Transition? t)
         {
             x = Round(x); z = Round(z);
-            var number = Emit($"{mode} X{Fmt(x)} Z{Fmt(z)}" + (mode == "G1" ? " F" + Fmt(t!.Feed) : ""));
             var distance = position is { } a ? Math.Sqrt(Math.Pow((x - a.X) / 2, 2) + Math.Pow(z - a.Z, 2)) : 0;
             if (mode == "G1") t!.CutMinutes += distance / (t.Feed * t.Rpm);
-            moves.Add(new(x, z, mode, t?.Id ?? "", number, mode == "G1" ? t!.Feed : null, t?.Rpm ?? 0));
-            t?.Blocks.Add(number);
+            var move = new Move(x, z, mode, t?.Id ?? "", 0, mode == "G1" ? t!.Feed : null, t?.Rpm ?? 0);
+            instructions.Add(new(NcInstructionKind.Motion, Motion: move));
             position = (x, z);
         }
-        Emit("G21 G18 G90 G94 G97 G40 G49 G80 G54");
-        Emit("G10 X1");
-        Emit("M9");
-        Emit("M5");
+        Emit(NcInstructionKind.Prepare);
+        Emit(NcInstructionKind.Diameter);
+        Emit(NcInstructionKind.CoolantOff);
+        Emit(NcInstructionKind.Stop);
         foreach (var d in definitions)
         {
             var t = new Transition
@@ -260,15 +266,15 @@ public static class Engine
             };
             if (d.Tool != activeTool)
             {
-                if (activeTool != 0) { Move("G0", c.ClearOut, p.ClearanceZ, null); Emit("G94"); Emit("M9"); Emit("M5"); }
-                Emit($"T{d.Tool} D1 M66");
-                Emit("G43");
-                Emit("M8");
+                if (activeTool != 0) { Move("G0", c.ClearOut, p.ClearanceZ, null); Emit(NcInstructionKind.FeedPerMinute); Emit(NcInstructionKind.CoolantOff); Emit(NcInstructionKind.Stop); }
+                Emit(NcInstructionKind.Tool, tool: d.Tool);
+                Emit(NcInstructionKind.GeometryOffset);
+                Emit(NcInstructionKind.CoolantOn);
                 activeTool = d.Tool;
             }
-            lines.Add($"(TR {d.Id} {d.Tag})");
-            Emit($"S{Fmt(t.Rpm)} M3");
-            Emit("G95");
+            Emit(NcInstructionKind.Comment, text: $"TR {d.Id} {d.Tag}");
+            Emit(NcInstructionKind.Speed, value: t.Rpm);
+            Emit(NcInstructionKind.FeedPerRevolution);
             // После смены инструмента исходная точка задаётся явным G0.
             Move("G0", d.Kind == "inner" ? c.ClearIn : c.ClearOut, p.ClearanceZ, t);
             foreach (var diameter in t.Passes)
@@ -291,9 +297,12 @@ public static class Engine
             }
             transitions.Add(t);
         }
-        Move("G0", c.ClearIn, p.ClearanceZ, null); Move("G0", c.ClearOut, p.ClearanceZ, null); Emit("G94"); Emit("M9"); Emit("M5"); Emit("M30");
+        Move("G0", c.ClearIn, p.ClearanceZ, null); Move("G0", c.ClearOut, p.ClearanceZ, null); Emit(NcInstructionKind.FeedPerMinute); Emit(NcInstructionKind.CoolantOff); Emit(NcInstructionKind.Stop); Emit(NcInstructionKind.End);
         c = c with { TotalCutMinutes = transitions.Sum(t => t.CutMinutes) };
-        var nc = string.Join("\r\n", lines) + "\r\n";
+        var output = CncProfiles.Postprocessor(p.Controller).Process(new(id, c, transitions, instructions));
+        var nc = output.Text;
+        moves = output.Moves;
+        transitions = output.Transitions;
         var verification = NcVerifier.Verify(nc, p);
         if (!verification.Ok) errors.AddRange(verification.Errors.Select(e => new ValidationError("nc", e)));
         if (verification.Moves.Count != moves.Count) errors.Add(new("nc", "Независимая проверка восстановила другое число движений."));
@@ -308,7 +317,7 @@ public static class Engine
             errors.Add(new("nc", "Время G1 независимой проверки не совпало с расчётной моделью."));
         if (errors.Count > 0) return new(false, errors, warnings, null);
         var project = new Project { Id = id, Params = p, Calculations = c, Operations = operations, Transitions = transitions,
-            Moves = moves, Nc = nc, Warnings = warnings, Verification = verification };
+            Moves = moves, Nc = nc, NcFileName = output.FileName, ProgramName = output.ProgramName, Warnings = warnings, Verification = verification };
         project = project with { RouteHtml = HtmlCards.Route(project), TechnologyHtml = HtmlCards.Technology(project) };
         return new(true, [], warnings, project);
     }
