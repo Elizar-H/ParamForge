@@ -5,8 +5,8 @@ internal static class Theme
     internal static readonly Color Ink = Color.FromArgb(40, 44, 49);
     internal static readonly Color Muted = Color.FromArgb(100, 106, 113);
     internal static readonly Color Border = Color.FromArgb(216, 220, 224);
-    internal static readonly Color Surface = Color.FromArgb(247, 248, 249);
-    internal static readonly Color Accent = Color.FromArgb(49, 84, 120);
+    internal static readonly Color Surface = Color.FromArgb(246, 246, 245);
+    internal static readonly Color Accent = Color.FromArgb(58, 64, 70);
     internal static readonly Color Error = Color.FromArgb(164, 45, 45);
     internal static readonly Font Body = new("Segoe UI", 9F);
     internal static readonly Font Small = new("Segoe UI", 8.5F);

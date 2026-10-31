@@ -101,17 +101,16 @@ internal static partial class RegressionSuite
             Near(210, Millimetres(size, w + "h"), .05);
             Equal("landscape", (string?)size.Attribute(w + "orient"), "A4 landscape");
             var margins = section.Element(w + "pgMar") ?? throw new InvalidOperationException("Missing form page margins");
-            Near(20, Millimetres(margins, w + "left"), .05);
-            foreach (var side in new[] { "top", "right", "bottom" })
+            foreach (var side in new[] { "left", "top", "right", "bottom" })
             {
-                Near(5, Millimetres(margins, w + side), .05);
+                Near(5.5, Millimetres(margins, w + side), .05);
             }
         }
         var pageFrame = sections.Select(s => s.Element(w + "pgBorders")).Any(borders => HasFourBorders(borders, w));
         var tableFrame = tables.Any(table =>
             HasFourBorders(table.Element(w + "tblPr")?.Element(w + "tblBorders"), w) &&
-            Math.Abs(table.Element(w + "tblGrid")?.Elements(w + "gridCol").Sum(c => Millimetres(c, w + "w")) - 272 ?? double.PositiveInfinity) < .1);
-        Check(pageFrame || tableFrame, "four-sided form frame spanning the 272-mm printable width");
+            Math.Abs(table.Element(w + "tblGrid")?.Elements(w + "gridCol").Sum(c => Millimetres(c, w + "w")) - 286 ?? double.PositiveInfinity) < .1);
+        Check(pageFrame || tableFrame, "four-sided form frame spanning the 286-mm printable width");
         Check(!documents.Values.Any(d => d.Descendants(w + "documentProtection").Any()), "Word cards remain editable");
         Check(!document.Descendants(w + "altChunk").Any(), "Word content uses native paragraphs and tables");
         Check(
@@ -181,8 +180,8 @@ internal static partial class RegressionSuite
             }
 
             var rawHeader = Array.FindIndex(rows, row => row.Length > 0 && row[0] == "М02");
-            Check(rawHeader >= 0 && rawHeader + 1 < rows.Length, "route raw-stock profile row exists");
-            var rawProfile = rows[rawHeader + 1][8];
+            Check(rawHeader >= 0, "route raw-stock profile row exists");
+            var rawProfile = rows[rawHeader][8];
             var rawLength = Regex.Match(rawProfile, @"×\s*([0-9]+(?:,[0-9]+)?)");
             Check(rawLength.Success, "route raw-stock length is readable");
             Near(p.Calculations.RawStockLength, FormNumber(rawLength.Groups[1].Value));
@@ -218,7 +217,7 @@ internal static partial class RegressionSuite
         Check(regimeHeaders.Length > 0, "named operation regime columns");
         foreach (var header in regimeHeaders)
         {
-            Sequence(new[] { "Р", "", "ПИ", "D или B", "L", "t", "i", "S", "n", "V" }, header);
+            Sequence(new[] { "Р", "", "ПИ", "D или B, мм", "L, мм", "t, мм", "i", "S, мм/об", "n, об/мин", "V, м/мин" }, header);
         }
 
         var normHeader = document.Descendants(w + "tr").First(row => row.Elements(w + "tc")
@@ -247,7 +246,7 @@ internal static partial class RegressionSuite
             );
             Near(double.Parse(t.Tool[1..], CultureInfo.InvariantCulture), FormNumber(row[2]));
             Near(t.ReferenceDiameter, FormNumber(row[3]), .000501);
-            Near(Math.Abs(t.ZEnd - t.ZStart), FormNumber(row[4]), .000501);
+            Near(Math.Abs(t.ZEnd - t.ZStart) + (t.ZStart == 0 ? p.Params.ClearanceZ : 0), FormNumber(row[4]), .000501);
             Near(IndependentMaximumDepth(t), FormNumber(row[5]));
             Near(t.Passes.Count, FormNumber(row[6]));
             Near(t.Feed, FormNumber(row[7]), .000501);

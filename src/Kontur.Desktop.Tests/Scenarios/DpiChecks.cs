@@ -12,6 +12,18 @@ internal static partial class UiSmoke
         {
             try
             {
+                using (var settingsForm = new MainForm())
+                {
+                    settingsForm.Show();
+                    var settings = OpenProcessingForSmoke(settingsForm);
+                    settingsForm.SimulateDpiText(targetDpi);
+                    settingsForm.CaptureForm(Path.Combine(folder, $"100-processing-scale-{targetDpi}.png"));
+                    check("v213_processing_scaled_actions_" + targetDpi, FullyVisible(settings.ApplyButton, settingsForm)
+                        && FullyVisible(settings.Field("stockDiameter"), settingsForm) && FullyVisible(settings.EditRetract, settingsForm), null);
+                    check("v213_scaled_tab_caption_" + targetDpi, ((WorkspaceTabs)settingsForm.Workspace).TabPages.Cast<TabPage>()
+                        .All(((WorkspaceTabs)settingsForm.Workspace).CaptionFits), null);
+                    settingsForm.Close();
+                }
                 using var simulated = new MainForm();
                 simulated.Sketch.SimulatedModifiers = Keys.None;
                 simulated.Sketch.SyntheticInput = true;
@@ -19,6 +31,8 @@ internal static partial class UiSmoke
                 Application.DoEvents();
                 simulated.SimulateDpiText(targetDpi);
                 simulated.CaptureForm(Path.Combine(folder, $"06-text-scale-simulation-{targetDpi}dpi.png"));
+                CaptureViewMenu(simulated, Path.Combine(folder, $"97-view-menu-{targetDpi}.png"), Check);
+                simulated.SetToleranceView(false);
                 CheckCaptions(simulated, "scaled_" + targetDpi, Check);
                 Check("text_scale_simulation_" + targetDpi, simulated.DrawingLabelsInside && !simulated.DrawingLabelsOverlap && simulated.RearWallsClosed && simulated.DrawingLabelsClearOfMaterial && simulated.DrawingBoreDimensionsClearOfMaterial && simulated.DrawingLabelsClearOfRearEdges,
                     new

@@ -5,7 +5,7 @@
     <LangVersion>latest</LangVersion>
     <Deterministic>true</Deterministic>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <Version>2.11.0</Version>
+    <Version>2.13.1</Version>
     <Authors>Елизар Худяков</Authors>
   </PropertyGroup>
 </Project>

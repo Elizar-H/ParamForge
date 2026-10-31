@@ -47,9 +47,8 @@ internal static partial class UiSmoke
             AutoStock = true
         });
         form.GenerateNow();
-        using (var processing = new ProcessingDialog(form.CurrentProject!.Params, [], true))
+        var processing = OpenProcessingForSmoke(form, true);
         {
-            processing.Show(form);
             Application.DoEvents();
             processing.Field("length").Focus();
             typeof(Control).GetMethod("OnKeyDown", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(processing.Field("length"), [new KeyEventArgs(Keys.Down)]);
@@ -106,30 +105,19 @@ internal static partial class UiSmoke
         view.Refresh();
         Application.DoEvents();
         check(
-            "v211_plot_has_stock_grid_and_tool_marker",
-            view.Trajectory.StockRendered && view.Trajectory.GridLineCount > 0 && view.Trajectory.MarkerTool == 1,
+            "v213_plot_starts_without_stock_and_keeps_grid_and_tool_marker",
+            !view.Trajectory.StockRendered && !view.Trajectory.ShowStock && view.Trajectory.GridLineCount > 0 && view.Trajectory.MarkerTool == 1,
             null
         );
         view.CaptureImage(Path.Combine(folder, "90-full-trajectory.png"));
-        using (var timer = new System.Windows.Forms.Timer { Interval = 80 })
-        {
-            timer.Tick += (_, _) =>
-            {
-                if (Application.OpenForms.OfType<ProcessingDialog>().FirstOrDefault() is not { } dialog)
-                {
-                    return;
-                }
-
-                timer.Stop();
-                dialog.Field("bodyDiameter").Text = "98";
-                dialog.Field("bodyLowerDeviation").Text = "-0,1";
-                dialog.Field("bodyUpperDeviation").Text = "0,3";
-                Descendants(dialog).OfType<Button>().Single(b => b.Text == "Применить").PerformClick();
-            };
-            timer.Start();
-            view.ParametersButton.PerformClick();
-            timer.Stop();
-        }
+        view.ParametersButton.PerformClick();
+        processing = form.Processing!;
+        processing.Field("bodyDiameter").Text = "98";
+        processing.Field("bodyLowerDeviation").Text = "-0,1";
+        processing.Field("bodyUpperDeviation").Text = "0,3";
+        processing.ApplyButton.PerformClick();
+        processing.Close();
+        form.OpenInspection();
         check(
             "v211_viewer_parameter_editor_updates_one_shared_project",
             form.CurrentProject!.Params.BodyDiameter == 98 && form.CurrentProject.Calculations.TargetBodyDiameter == 98.1 && view.CurrentProjectId == form.CurrentProject.Id && view.SelectedTransitionId == id,
@@ -138,7 +126,7 @@ internal static partial class UiSmoke
         view.SelectTransitionForSmoke(3);
         view.Refresh();
         view.CaptureImage(Path.Combine(folder, "91-viewer-edited-parameters.png"));
-        view.Size = view.MinimumSize;
+        form.Size = form.MinimumSize;
         view.Refresh();
         Application.DoEvents();
         var layout = Descendants(view).OfType<TableLayoutPanel>().First(t => t.RowCount == 4);

@@ -58,7 +58,8 @@ flowchart LR
 | Чертёж и размерные надписи | `src/Kontur.Desktop/Drawing/SketchCanvas.Rendering.cs` |
 | Перетаскивание размера | `Drawing/SketchCanvas.cs` и `MainWindow/MainForm.Dragging.cs` в Desktop |
 | Панель выбора допусков | `src/Kontur.Desktop/Dimensions/DimensionEditor.cs` и `TolerancePicker.cs` |
-| Окно и изображение траектории | `src/Kontur.Desktop/Inspection/ResultInspectionForm.cs` и `Rendering/TrajectoryCanvas.Rendering.cs` |
+| Вкладка и изображение траектории | `src/Kontur.Desktop/Inspection/ResultInspectionView.cs` и `Rendering/TrajectoryCanvas.Rendering.cs` |
+| Разделы заготовки, обработки и их ввод | `src/Kontur.Desktop/Processing/ProcessingView.cs`, `ProcessingView.Navigation.cs` |
 | Таблицы Word | `src/Kontur.Core/Documents/NativeDocxCards.cs` |
 | Импорт JSON и защиту файлов | `src/Kontur.Core/Persistence/ProjectFiles.cs` |
 | Проверку конкретного поведения | `Cases` в тестах ядра или `Scenarios` в проверках интерфейса |
@@ -73,7 +74,8 @@ flowchart LR
 - `MainForm.Tolerances.cs` — открытие и применение боковой панели допусков.
 - `MainForm.Dragging.cs` — начало, предварительное изменение и завершение перемещения.
 - `MainForm.Errors.cs` — отображение ошибок рядом с полями.
-- `MainForm.Windows.cs` — открытие связанных окон и согласование ЧПУ.
+- `MainForm.Navigation.cs` — переход от диагностического сообщения к нужному параметру.
+- `MainForm.Windows.cs` — открытие и закрытие рабочих вкладок, применение настроек и согласование ЧПУ.
 - `MainForm.Files.cs` — диалоги открытия, сохранения и выпуска.
 - `MainForm.Diagnostics.cs` — внутренние точки доступа и снимки для проверок.
 
@@ -85,4 +87,6 @@ flowchart LR
 
 В `Kontur.Desktop.Tests` вход находится в `Program.cs`, общая последовательность — в `UiSmoke.cs`, вспомогательные действия — в `UiSmoke.Support.cs`, сценарии — в `Scenarios`. Имена сценариев описывают функцию; исторические номера в идентификаторах отдельных проверок сохранены для сравнения отчётов.
 
-Количество строк не ограничено искусственным пределом. Например, модальная проверка УП длиннее простого элемента ввода, но остаётся одной связной задачей. Основание для выделения класса — самостоятельная обязанность, которую можно назвать и проверить.
+Количество строк не ограничено искусственным пределом. Например, вкладка проверки УП длиннее простого элемента ввода, но остаётся одной связной задачей. Основание для выделения класса — самостоятельная обязанность, которую можно назвать и проверить.
+
+Развитие программы для других деталей описано в [PART_PROFILES.md](PART_PROFILES.md).

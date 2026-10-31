@@ -17,7 +17,8 @@ internal sealed partial class MainForm : Form
     };
     private readonly SketchCanvas sketch = new()
     {
-        Dock = DockStyle.Fill
+        Dock = DockStyle.Fill,
+        ShowTolerances = true
     };
     private readonly Button exportButton = Theme.Button("Сформировать документы", true);
     private readonly ComboBox controllerInput = new()
@@ -25,10 +26,17 @@ internal sealed partial class MainForm : Form
         DropDownStyle = ComboBoxStyle.DropDownList,
         Dock = DockStyle.Fill
     };
-    private ResultInspectionForm? inspection;
+    private ResultInspectionView? inspection;
+    private readonly WorkspaceTabs workspace = new();
+    private readonly TabPage geometryPage = new("Геометрия") { BackColor = Theme.Surface, Padding = Padding.Empty };
+    private TabPage? inspectionPage;
+    private TabPage? processingPage;
+    private ProcessingView? processing;
+    internal ProcessingView? Processing => processing;
     private readonly ToolStripMenuItem toleranceView = new("Показывать допуски")
     {
-        CheckOnClick = true
+        CheckOnClick = true,
+        Checked = true
     };
     private readonly ColumnStyle geometryColumn = new(SizeType.Absolute, 440);
     private readonly Panel geometryHost = new()
@@ -54,7 +62,9 @@ internal sealed partial class MainForm : Form
     internal DeviationReadout DeviationView(string key) => deviationReadouts[key];
     internal bool ToleranceViewVisible => toleranceView.Checked;
 
-    private readonly Label status = Theme.Label("", Theme.Small);
+    private readonly ActionableStatusLabel status = new();
+    internal ActionableStatusLabel Diagnostic => status;
+    internal TabControl Workspace => workspace;
     private readonly System.Windows.Forms.Timer previewTimer = new()
     {
         Interval = 180
@@ -76,10 +86,23 @@ internal sealed partial class MainForm : Form
         BackColor = Theme.Surface;
         AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(1280, 850);
-        MinimumSize = new Size(1180, 760);
+        // Keep the drawing's minimum working area after adding the page strip.
+        MinimumSize = new Size(1188, 794);
         StartPosition = FormStartPosition.CenterScreen;
         errors.ContainerControl = this;
         InitializeLayout();
+        workspace.CloseRequested += page =>
+        {
+            if (page == inspectionPage)
+            {
+                CloseInspection();
+            }
+            else if (page == processingPage)
+            {
+                CloseProcessing();
+            }
+        };
+        status.Bind(DiagnosticTarget, NavigateDiagnostic);
         Resize += (_, _) => PositionDimensionFlyout();
         geometryHost.SizeChanged += (_, _) => PositionDimensionFlyout();
         geometryHost.LocationChanged += (_, _) => PositionDimensionFlyout();
@@ -100,7 +123,7 @@ internal sealed partial class MainForm : Form
         GenerateNow();
     }
     internal SketchCanvas Sketch => sketch;
-    internal ResultInspectionForm? Inspection => inspection;
+    internal ResultInspectionView? Inspection => inspection;
 
     protected override void Dispose(bool disposing)
     {

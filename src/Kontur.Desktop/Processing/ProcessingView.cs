@@ -1,10 +1,11 @@
+using System.ComponentModel;
 using System.Reflection;
 using Kontur.Core;
 namespace Kontur.Desktop;
 
-internal sealed class ProcessingDialog : Form
+internal sealed partial class ProcessingView : UserControl
 {
-    private readonly Parameters original;
+    private Parameters original;
     private readonly Dictionary<string, TextBox> boxes = [];
     private readonly Dictionary<string, Label> targets = [];
     private readonly HashSet<string> manualDeviations = [];
@@ -14,9 +15,26 @@ internal sealed class ProcessingDialog : Form
     private readonly Label stockMinimum = Theme.Label("", Theme.Detail);
     private readonly ComboBox stockMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Top };
     private bool updating;
+    private bool applied;
     private string manualDiameter = "", manualBore = "";
-    internal readonly TabControl Tabs = new() { Dock = DockStyle.Fill, Name = "ProcessingTabs", Multiline = true };
-    internal readonly Button ChooseStock = Theme.Button("Подобрать размеры");
+    internal readonly SettingsSections Sections = new();
+    internal readonly Button ChooseStock = Theme.Button("Рассчитать по детали");
+    internal readonly Button ApplyButton = Theme.Button("Применить", true);
+    internal readonly Button CancelEditorButton = Theme.Button("Отмена");
+    private readonly HashSet<string> editedProperties = [];
+    internal IReadOnlySet<string> EditedProperties => editedProperties;
+    internal bool IsDirty => editedProperties.Count != 0;
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    internal Func<Parameters, GenerationResult>? GenerateCandidate
+    {
+        get; set;
+    }
+    internal event Action<Project>? Accepted;
+    internal event Action? Cancelled;
+    internal void Close() => Cancelled?.Invoke();
+    private readonly Label boreLimits = Theme.Label("", Theme.Detail);
+    internal string BoreLimitsText => boreLimits.Text;
+    internal readonly LinkLabel EditRetract = new() { Text = "Изменить отвод инструмента", AutoSize = true, LinkColor = Theme.Ink, ActiveLinkColor = Theme.Ink, VisitedLinkColor = Theme.Ink, LinkBehavior = LinkBehavior.HoverUnderline, Font = Theme.Detail };
     internal Parameters? Result
     {
         get; private set;
@@ -24,42 +42,56 @@ internal sealed class ProcessingDialog : Form
     internal string ErrorText => error.Text;
     internal TextBox Field(string key) => boxes[key];
     internal ComboBox StockMode => stockMode;
-    internal ProcessingDialog(Parameters parameters, HashSet<string> mainKeys, bool targets = false)
+    internal void FocusField(string key)
+    {
+        if (!boxes.TryGetValue(key, out var box))
+        {
+            return;
+        }
+        Sections.ShowField(box);
+        if (box.ReadOnly && key is "stockBore" or "stockDiameter")
+        {
+            stockMode.Focus();
+        }
+        else
+        {
+            box.Focus();
+            box.SelectAll();
+        }
+    }
+    internal ProcessingView(Parameters parameters, bool targets = false)
     {
         original = StockSelection.Resolve(Tolerances.Resolve(parameters));
         Text = "Заготовка и обработка";
         Font = Theme.Detail;
         BackColor = Color.White;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(880, 650);
-        MinimumSize = new Size(800, 570);
-        StartPosition = FormStartPosition.CenterParent;
-        MaximizeBox = MinimizeBox = false;
         errors.ContainerControl = this;
         var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(12, 5, 12, 5) };
-        var cancel = Theme.Button("Отмена");
+        var cancel = CancelEditorButton;
         cancel.Width = 140;
-        cancel.DialogResult = DialogResult.Cancel;
-        var apply = Theme.Button("Применить", true);
+        cancel.Click += (_, _) => Cancelled?.Invoke();
+        var apply = ApplyButton;
         apply.Width = 140;
         apply.Click += (_, _) => Apply();
         footer.Controls.AddRange([cancel, apply]);
-        AcceptButton = apply;
-        CancelButton = cancel;
         error.Dock = DockStyle.Bottom;
         error.Height = 42;
         error.Padding = new Padding(18, 0, 18, 0);
         error.ForeColor = Theme.Error;
-        Controls.Add(Tabs);
+        error.Visible = false;
+        error.TextChanged += (_, _) => error.Visible = error.Text.Length != 0;
+        Controls.Add(Sections);
         Controls.Add(error);
         Controls.Add(footer);
-        Tabs.BringToFront();
+        Sections.BringToFront();
+        tips.SetToolTip(Sections.Navigation, "← / → — раздел; ↓ — к полям. Enter — следующая строка; Ctrl+Enter — применить.");
         foreach (var (caption, group) in new[] { ("Заготовка", "Заготовка"), ("Закрепление", "Зажим"), ("Режимы", "Режимы"), ("Подходы", "Подходы") })
         {
             var table = Page(caption);
             if (group == "Заготовка")
             {
-                stockMode.Items.AddRange(["Расчётная", "Задана вручную"]);
+                stockMode.Items.AddRange(["Рассчитывать по детали", "Задать размеры"]);
                 stockMode.SelectedIndex = original.AutoStock ? 0 : 1;
                 var row = table.RowCount++;
                 table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -69,7 +101,16 @@ internal sealed class ProcessingDialog : Form
             }
             foreach (var field in Engine.Fields.Where(f => Group(f) == group))
             {
-                AddField(table, field.Key, field.Label + ", " + field.Unit, field.Note);
+                var label = field.Key switch
+                {
+                    "stockBore" => "Начальное отверстие",
+                    "stockDiameter" => "Наружный диаметр",
+                    "trimAllowance" => "Запас на задний торец",
+                    "frontFacingAllowance" => "Запас на передний торец",
+                    "gripLength" => "Длина в кулачках",
+                    _ => field.Label
+                };
+                AddField(table, field.Key, label + ", " + field.Unit, field.Note);
             }
 
             if (group == "Заготовка")
@@ -85,6 +126,18 @@ internal sealed class ProcessingDialog : Form
                 ChooseStock.Margin = new Padding(5, 4, 0, 6);
                 ChooseStock.Click += (_, _) => { stockMode.SelectedIndex = 0; RefreshValues(); };
                 table.Controls.Add(ChooseStock, 1, row);
+                row = table.RowCount++;
+                table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                boreLimits.AutoSize = true;
+                boreLimits.Margin = new Padding(0, 16, 0, 6);
+                table.Controls.Add(boreLimits, 0, row);
+                table.SetColumnSpan(boreLimits, 2);
+                row = table.RowCount++;
+                table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                EditRetract.Margin = new Padding(0, 0, 0, 12);
+                EditRetract.LinkClicked += (_, _) => FocusField("clearanceX");
+                table.Controls.Add(EditRetract, 0, row);
+                table.SetColumnSpan(EditRetract, 2);
                 tips.SetToolTip(
                     stockMode,
                     "Расчётная: наружный запас 4 мм, отверстие на 2 мм меньше d, округление до целого мм; учитываются припуски и выбранная оправка. Это расчёт, не наличие сортамента."
@@ -92,7 +145,6 @@ internal sealed class ProcessingDialog : Form
             }
         }
         AddTargets();
-        NominalNavigation.Attach(Tolerances.EditableDimensions.Select(d => boxes[Key(d.NominalProperty)]).ToArray());
         var metadata = Page("Деталь");
         AddField(metadata, "partName", "Наименование детали", "");
         AddField(metadata, "material", "Материал", "");
@@ -106,6 +158,11 @@ internal sealed class ProcessingDialog : Form
         manualBore = boxes["stockBore"].Text;
         stockMode.SelectedIndexChanged += (_, _) =>
         {
+            if (updating)
+            {
+                return;
+            }
+            editedProperties.Add("autoStock");
             if (stockMode.SelectedIndex == 0)
             {
                 manualDiameter = boxes["stockDiameter"].Text;
@@ -117,6 +174,8 @@ internal sealed class ProcessingDialog : Form
                 boxes["stockDiameter"].Text = manualDiameter;
                 boxes["stockBore"].Text = manualBore;
                 updating = false;
+                editedProperties.Add("stockDiameter");
+                editedProperties.Add("stockBore");
             }
             RefreshValues();
         };
@@ -130,9 +189,20 @@ internal sealed class ProcessingDialog : Form
             }
 
             var d = Tolerances.EditableDimensions.SingleOrDefault(d => Key(d.LowerProperty) == key || Key(d.UpperProperty) == key);
+            var originalValue = Property(key).GetValue(original);
+            var unchanged = originalValue is double number ? NumericText.TryParse(box.Text, out var parsed) && parsed == number : Equals(originalValue, box.Text.Trim());
+            if (unchanged)
+            {
+                editedProperties.Remove(key);
+            }
+            else
+            {
+                editedProperties.Add(key);
+            }
             if (d is not null)
             {
                 manualDeviations.Add(d.Key);
+                editedProperties.Add(Key(d.DesignationProperty));
             }
 
             error.Text = "";
@@ -141,9 +211,10 @@ internal sealed class ProcessingDialog : Form
         }
 
         RefreshValues();
+        AttachKeyboardNavigation();
         if (targets)
         {
-            Tabs.SelectedIndex = 4;
+            Sections.SelectedIndex = 4;
         }
     }
     private static string Key(string property) => char.ToLowerInvariant(property[0]) + property[1..];
@@ -151,14 +222,21 @@ internal sealed class ProcessingDialog : Form
     private static PropertyInfo Property(string key) => typeof(Parameters).GetProperty(char.ToUpperInvariant(key[0]) + key[1..])!;
     private TableLayoutPanel Page(string caption)
     {
-        var page = new TabPage(caption) { BackColor = Color.White, Padding = new Padding(16) };
-        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        var description = caption switch
+        {
+            "Заготовка" => "Полая заготовка перед началом обработки.",
+            "Закрепление" => "Зажим для операции 010. Переустановка выполняется позже, в операции 020.",
+            "Режимы" => "Глубина проходов, подачи и ограничение оборотов.",
+            "Подходы" => "Свободное место для подвода и отвода инструмента.",
+            "Деталь" => "Наименование и материал для документов.",
+            _ => "Реквизиты маршрутной и операционной карт."
+        };
+        var page = Sections.AddPage(caption == "Подходы" ? "Движения инструмента" : caption, description);
         var table = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, RowCount = 0, Margin = Padding.Empty };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
-        scroll.Controls.Add(table);
-        page.Controls.Add(scroll);
-        Tabs.TabPages.Add(page);
+        page.Controls.Add(table);
+        table.BringToFront();
         return table;
     }
     private TextBox Box(string key)
@@ -224,6 +302,7 @@ internal sealed class ProcessingDialog : Form
         {
             var p = CurrentValues();
             var auto = p.AutoStock;
+            ChooseStock.Visible = !auto;
             foreach (var key in new[] { "stockDiameter", "stockBore" })
             {
                 boxes[key].ReadOnly = auto;
@@ -234,6 +313,11 @@ internal sealed class ProcessingDialog : Form
                 }
             }
             stockMinimum.Text = auto ? "Размеры следуют за деталью" : "Сохраняются при изменении детали";
+            var (minimum, maximum) = StockSelection.BoreLimits(p);
+            boreLimits.ForeColor = minimum > maximum || p.StockBore < minimum || p.StockBore > maximum ? Theme.Error : Theme.Muted;
+            boreLimits.Text = minimum > maximum
+                ? $"Оправке с отводом нужно от Ø{NumericText.Format(minimum)} мм.\nДля растачивания допустимо до Ø{NumericText.Format(maximum)} мм.\nУменьшите отвод или выберите другую оправку."
+                : $"Допустимое начальное отверстие: Ø{NumericText.Format(minimum)}…Ø{NumericText.Format(maximum)} мм.\nМеньше — не пройдёт оправка с отводом.\nБольше — не хватит запаса для растачивания.";
             foreach (var d in Tolerances.EditableDimensions)
             {
                 var nominal = Tolerances.Number(p, d.NominalProperty);
@@ -246,16 +330,37 @@ internal sealed class ProcessingDialog : Form
                 }
                 targets[d.Key].Text = NumericText.Format(Engine.Target(nominal, lo, hi));
             }
+            foreach (var key in editedProperties.ToArray())
+            {
+                if (boxes.TryGetValue(key, out var box) && Property(key).PropertyType == typeof(double) && !NumericText.TryParse(box.Text, out _))
+                {
+                    continue;
+                }
+                if (Equals(Property(key).GetValue(p), Property(key).GetValue(original)))
+                {
+                    editedProperties.Remove(key);
+                }
+            }
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException) { stockMinimum.Text = "Проверьте размеры и отклонения."; }
-        finally { updating = false; }
+        finally
+        {
+            updating = false;
+            UpdateApplyState();
+        }
+    }
+    private void UpdateApplyState()
+    {
+        ApplyButton.Enabled = IsDirty;
+        ApplyButton.Text = !IsDirty && applied ? "Применено" : "Применить";
+        ApplyButton.BackColor = IsDirty ? Theme.Accent : Theme.Surface;
+        ApplyButton.ForeColor = IsDirty ? Color.White : Theme.Muted;
+        ApplyButton.FlatAppearance.BorderColor = IsDirty ? Theme.Accent : Theme.Border;
+        ApplyButton.Cursor = IsDirty ? Cursors.Hand : Cursors.Default;
     }
     private void AddTargets()
     {
-        var page = new TabPage("Размеры для УП") { BackColor = Color.White, Padding = new Padding(16) };
-        var explanation = Theme.Label("Номинал и отклонения можно менять. Для УП используется середина допуска.", Theme.Detail);
-        explanation.Dock = DockStyle.Top;
-        explanation.Height = 44;
+        var page = Sections.AddPage("Размеры и допуски", "Для обработки используется середина допуска. Номинал и отклонения можно изменить.");
         var table = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 5, RowCount = 8 };
         foreach (var width in new[] { 28F, 18F, 18F, 18F, 18F })
         {
@@ -293,15 +398,15 @@ internal sealed class ProcessingDialog : Form
             targets.Add(d.Key, target);
             table.Controls.Add(target, 4, row + 1);
         }
-        var body = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-        body.Controls.Add(table);
-        body.Controls.Add(explanation);
+        page.Controls.Add(table);
         table.BringToFront();
-        page.Controls.Add(body);
-        Tabs.TabPages.Add(page);
     }
     private void Apply()
     {
+        if (!IsDirty)
+        {
+            return;
+        }
         errors.Clear();
         var invalid = new List<ValidationError>();
         foreach (var (key, box) in boxes)
@@ -318,9 +423,12 @@ internal sealed class ProcessingDialog : Form
             value = CurrentValues();
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException) { error.Text = ex.Message; return; }
+        Project? generatedProject = null;
         if (invalid.Count == 0)
         {
-            invalid.AddRange(Engine.Validate(value));
+            var generated = GenerateCandidate?.Invoke(value) ?? Engine.Generate(value);
+            invalid.AddRange(generated.Errors);
+            generatedProject = generated.Project;
         }
 
         if (invalid.Count != 0)
@@ -334,23 +442,63 @@ internal sealed class ProcessingDialog : Form
                 }
             }
 
-            if (boxes.TryGetValue(invalid[0].Field, out var first))
-            {
-                for (Control? parent = first.Parent; parent is not null; parent = parent.Parent)
-                {
-                    if (parent is TabPage page)
-                    {
-                        Tabs.SelectedTab = page;
-                    }
-                }
-
-                first.Focus();
-                first.SelectAll();
-            }
+            FocusField(invalid[0].Field);
             return;
         }
-        Result = value;
-        DialogResult = DialogResult.OK;
+        if (generatedProject is null)
+        {
+            return;
+        }
+        Result = generatedProject.Params;
+        applied = true;
+        editedProperties.Clear();
+        manualDeviations.Clear();
+        Rebase(Result);
+        Accepted?.Invoke(generatedProject);
+    }
+
+    internal void Rebase(Parameters latest)
+    {
+        updating = true;
+        try
+        {
+            original = latest;
+            foreach (var (key, box) in boxes)
+            {
+                if (editedProperties.Contains(key))
+                {
+                    continue;
+                }
+                var value = Property(key).GetValue(latest);
+                box.Text = value is double number ? NumericText.Format(number) : value?.ToString();
+            }
+            if (!editedProperties.Contains("autoStock"))
+            {
+                stockMode.SelectedIndex = latest.AutoStock ? 0 : 1;
+            }
+            if (stockMode.SelectedIndex == 1)
+            {
+                manualDiameter = boxes["stockDiameter"].Text;
+                manualBore = boxes["stockBore"].Text;
+            }
+        }
+        finally { updating = false; }
+        RefreshValues();
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == Keys.Escape)
+        {
+            Cancelled?.Invoke();
+            return true;
+        }
+        if (keyData == (Keys.Control | Keys.Enter))
+        {
+            Apply();
+            return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
     }
     protected override void Dispose(bool disposing)
     {

@@ -26,7 +26,7 @@ internal static partial class UiSmoke
             form.Size == size && form.Sketch.Size == canvas && form.Sketch.WorkOrigin == origin && positions.All(pair => Descendants(form).Single(c => c.Name == pair.Key).PointToScreen(Point.Empty) == pair.Value),
             null
         );
-        check("v210_no_redundant_tolerance_checkbox", !Descendants(form).OfType<CheckBox>().Any(), null);
+        check("v210_no_redundant_tolerance_checkbox", !Descendants(form.Workspace.TabPages[0]).OfType<CheckBox>().Any(), null);
         check(
             "v210_processing_action_visible_at_minimum",
             FullyVisible(Descendants(form).OfType<Button>().Single(b => b.Text == "Заготовка и обработка…"), form),
@@ -178,13 +178,12 @@ internal static partial class UiSmoke
             !form.IsStale && form.CurrentProject!.Params.StockDiameter == 154,
             form.StatusText
         );
-        using (var processing = new ProcessingDialog(form.CurrentProject!.Params, []))
+        var processing = OpenProcessingForSmoke(form);
         {
-            processing.Show(form);
             Application.DoEvents();
             check(
                 "v210_processing_has_cards_tab",
-                processing.Tabs.TabPages.Count == 7 && processing.Tabs.TabPages[6].Text == "Карты",
+                processing.Sections.Pages.Count == 7 && processing.Sections.Pages[6].Text == "Карты",
                 null
             );
             CaptureDialog(processing, Path.Combine(folder, "81-stock-mode.png"));
@@ -203,12 +202,12 @@ internal static partial class UiSmoke
                 processing.Field("stockDiameter").Text == "156" && processing.Field("stockBore").Text == "44" && !processing.Field("stockBore").ReadOnly,
                 null
             );
-            processing.Tabs.SelectedIndex = 4;
+            processing.Sections.SelectedIndex = 4;
             processing.Field("bodyDiameter").Text = "98";
             processing.Field("bodyLowerDeviation").Text = "-0,1";
             processing.Field("bodyUpperDeviation").Text = "0,3";
             CaptureDialog(processing, Path.Combine(folder, "82-editable-targets.png"));
-            processing.Tabs.SelectedIndex = 6;
+            processing.Sections.SelectedIndex = 6;
             processing.Field("developer").Text = "Худяков Е.";
             processing.Field("drawingNumber").Text = "ПФ.001";
             CaptureDialog(processing, Path.Combine(folder, "83-card-fields.png"));

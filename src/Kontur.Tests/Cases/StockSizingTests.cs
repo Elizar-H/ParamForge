@@ -6,6 +6,45 @@ internal static partial class RegressionSuite
 {
     private static void RegisterStockSizingTests()
     {
+        Add("bore limits expose both tool clearance and required removal", () =>
+        {
+            var limits = StockSelection.BoreLimits(Engine.Defaults);
+            Near(44, limits.Minimum);
+            Near(47.3, limits.Maximum);
+            foreach (var bore in new[] { limits.Minimum, limits.Maximum })
+            {
+                Check(Engine.Generate(Engine.Defaults with
+                {
+                    StockBore = bore
+                }).Ok, "both endpoints allow boring");
+            }
+            Rejected(Engine.Defaults with
+            {
+                StockBore = limits.Minimum - .001
+            }, "clearanceX");
+            Rejected(Engine.Defaults with
+            {
+                StockBore = limits.Maximum + .001
+            }, "stockBore");
+        });
+        Add("reducing retract restores an empty automatic-bore interval", () =>
+        {
+            var p = Engine.Defaults with
+            {
+                AutoStock = true,
+                BoreDiameter = 41
+            };
+            var impossible = StockSelection.BoreLimits(p);
+            Near(44, impossible.Minimum);
+            Near(41, impossible.Maximum);
+            Check(!Engine.Generate(p).Ok, "no stock bore can meet both constraints");
+            var repaired = Generated(p with
+            {
+                ClearanceX = .5
+            });
+            Near(41, repaired.Params.StockBore);
+            Check(repaired.Verification.Ok, "repaired generated code must verify");
+        });
         Add(
             "minimum stock diameter includes target and rough plus finish removal",
             () => Near(120.065, Engine.MinimumStockDiameter(Engine.Defaults))

@@ -53,7 +53,7 @@ internal sealed partial class MainForm
             GenerateNow();
         };
         footer.Controls.Add(controllerInput, 0, 0);
-        var inspect = Theme.Button("Траектория УП…");
+        var inspect = Theme.Button("Траектория УП");
         inspect.Name = "InspectionAction";
         inspect.Dock = DockStyle.Top;
         inspect.AutoSize = true;
@@ -252,6 +252,7 @@ internal sealed partial class MainForm
             Font = Theme.Body,
             Padding = new Padding(12, 3, 0, 3)
         };
+        menu.Renderer = new ApplicationMenuRenderer();
 
         var file = new ToolStripMenuItem("Файл");
 
@@ -298,6 +299,8 @@ internal sealed partial class MainForm
         };
 
         view.DropDownItems.AddRange([axes, toleranceView]);
+        ApplicationMenuRenderer.Configure(view);
+        ApplicationMenuRenderer.Configure(file);
 
         menu.Items.Add(view);
 
@@ -338,7 +341,17 @@ internal sealed partial class MainForm
 
         root.Controls.Add(drawingPanel, 2, 0);
 
-        Controls.Add(root);
+        geometryPage.Controls.Add(root);
+        workspace.TabPages.Add(geometryPage);
+        workspace.SelectedIndexChanged += (_, _) =>
+        {
+            CloseDimensionEditor();
+            if (workspace.SelectedTab == processingPage && processing is not null && ReadParameters(false, false) is { } latest)
+            {
+                processing.Rebase(latest);
+            }
+        };
+        Controls.Add(workspace);
 
         Controls.Add(menu);
 

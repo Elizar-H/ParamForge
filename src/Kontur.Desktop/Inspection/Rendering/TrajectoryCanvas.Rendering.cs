@@ -6,7 +6,10 @@ namespace Kontur.Desktop;
 internal sealed partial class TrajectoryCanvas
 {
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    internal bool ShowStock { get; set; } = true;
+    internal bool ShowStock
+    {
+        get; set;
+    }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     internal bool ShowGrid { get; set; } = true;
     internal int GridLineCount
@@ -21,6 +24,14 @@ internal sealed partial class TrajectoryCanvas
     {
         get; private set;
     }
+    internal int WorkingArrowCount
+    {
+        get; private set;
+    }
+    internal int RapidArrowCount
+    {
+        get; private set;
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -28,6 +39,7 @@ internal sealed partial class TrajectoryCanvas
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         VisibleSegmentCount = GridLineCount = 0;
+        WorkingArrowCount = RapidArrowCount = 0;
         StockRendered = false;
         MarkerTool = null;
         if (project is null || project.Verification.Moves.Count == 0)
@@ -166,9 +178,19 @@ internal sealed partial class TrajectoryCanvas
                 var b = Point(move.Z, move.X / 2);
                 g.DrawLine(pen, a, b);
                 VisibleSegmentCount++;
-                if (active && move.Mode == "G1")
+                if (active)
                 {
-                    DrawDirection(g, a, b, pen.Color, u);
+                    if (DrawDirection(g, a, b, pen.Color, u, move.Mode == "G1"))
+                    {
+                        if (move.Mode == "G1")
+                        {
+                            WorkingArrowCount++;
+                        }
+                        else
+                        {
+                            RapidArrowCount++;
+                        }
+                    }
                 }
             }
         }
@@ -246,24 +268,35 @@ internal sealed partial class TrajectoryCanvas
         var fraction = desired / power;
         return power * (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10);
     }
-    private static void DrawDirection(Graphics g, PointF from, PointF to, Color color, float u)
+    private static bool DrawDirection(Graphics g, PointF from, PointF to, Color color, float u, bool working)
     {
         var dx = to.X - from.X;
         var dy = to.Y - from.Y;
         var length = MathF.Sqrt(dx * dx + dy * dy);
-        if (length < 32 * u)
+        if (length < 2 * u)
         {
-            return;
+            return false;
         }
 
-        var x = from.X + dx * .6F;
-        var y = from.Y + dy * .6F;
         dx /= length;
         dy /= length;
-        using var brush = new SolidBrush(color);
-        g.FillPolygon(
-            brush,
-            [new PointF(x + dx * 5 * u, y + dy * 5 * u), new(x - dx * 3 * u - dy * 2.6F * u, y - dy * 3 * u + dx * 2.6F * u), new(x - dx * 3 * u + dy * 2.6F * u, y - dy * 3 * u - dx * 2.6F * u)]
-        );
+        var size = working ? Math.Min(5 * u, length / 3) : Math.Min(4 * u, Math.Max(2.5F * u, length / 3));
+        var at = working ? length * .6F : length - size;
+        var x = from.X + dx * at;
+        var y = from.Y + dy * at;
+        var tip = new PointF(x + dx * size, y + dy * size);
+        var a = new PointF(x - dx * size * .6F - dy * size * .52F, y - dy * size * .6F + dx * size * .52F);
+        var b = new PointF(x - dx * size * .6F + dy * size * .52F, y - dy * size * .6F - dx * size * .52F);
+        if (working)
+        {
+            using var brush = new SolidBrush(color);
+            g.FillPolygon(brush, [tip, a, b]);
+        }
+        else
+        {
+            using var pen = new Pen(color, Math.Max(1, u));
+            g.DrawLines(pen, new PointF[] { a, tip, b });
+        }
+        return true;
     }
 }

@@ -107,11 +107,11 @@ internal static partial class UiSmoke
             inspection.SelectedMoveCount
         );
         inspection.CaptureImage(Path.Combine(folder, "24-inspection-siemens.png"));
-        inspection.Size = inspection.MinimumSize;
+        form.Size = form.MinimumSize;
         inspection.Refresh();
         Application.DoEvents();
         inspection.CaptureImage(Path.Combine(folder, "25-trajectory-minimum.png"));
-        inspection.ClientSize = new Size(1200, 850);
+        form.ClientSize = new Size(1280, 850);
         inspection.Refresh();
         Application.DoEvents();
         var move = form.CurrentProject!.Verification.Moves.First(m => m.Mode == "G1");

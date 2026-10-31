@@ -8,7 +8,7 @@ namespace Kontur.Core;
 /// <summary>Coordinates validation, machining planning, postprocessing and document generation.</summary>
 public static class Engine
 {
-    public const string Version = "2.11.0";
+    public const string Version = "2.13.1";
     public static Parameters Defaults => new();
 
     internal static double Round(double value) => Math.Round(value, 3, MidpointRounding.AwayFromZero);

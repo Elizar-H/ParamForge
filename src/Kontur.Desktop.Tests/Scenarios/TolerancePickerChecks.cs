@@ -134,6 +134,7 @@ internal static partial class UiSmoke
             RenderDrawing(scaled);
             CheckCaptions(scaled, "editor_scale_" + targetDpi, check);
             CheckPickerLayout(scaledEditor, "scale_" + targetDpi, check);
+            CheckButtonPair("v212_editor_footer_" + targetDpi, scaledEditor.CancelEditorButton, scaledEditor.ApplyButton, check);
             var scroll = Descendants(scaledEditor).OfType<Panel>().Single(c => c.AutoScroll);
             check("v27_scale_details_and_actions_" + targetDpi, !scroll.HorizontalScroll.Visible && FullyVisible(scaledEditor.NominalInput, scaled)
                 && FullyVisible(scaledEditor.LowerInput!, scaled) && FullyVisible(scaledEditor.ApplyButton, scaled), null);

@@ -4,6 +4,14 @@ namespace Kontur.Core;
 /// The 4/2 mm diametral margins reproduce the initial project, not a stock catalogue.</summary>
 public static class StockSelection
 {
+    /// <summary>Allowed initial bore: tool plus retract through the material required for boring.</summary>
+    public static (double Minimum, double Maximum) BoreLimits(Parameters parameters)
+    {
+        var p = Tolerances.Resolve(parameters);
+        return (ToolingProfile.BoringMinimumDiameter + 2 * p.ClearanceX,
+            Engine.Target(p.BoreDiameter, p.BoreLowerDeviation, p.BoreUpperDeviation) - 2 * (p.FinishAllowance + .05));
+    }
+
     public static Parameters Resolve(Parameters parameters)
     {
         if (!parameters.AutoStock)
@@ -20,10 +28,8 @@ public static class StockSelection
             return p;
         }
 
-        var removal = 2 * (p.FinishAllowance + .05);
         var diameter = Math.Ceiling(Math.Max(p.FlangeDiameter + 4, Engine.MinimumStockDiameter(p)));
-        var maximumBore = Engine.Target(p.BoreDiameter, p.BoreLowerDeviation, p.BoreUpperDeviation) - removal;
-        var minimumBore = ToolingProfile.BoringMinimumDiameter + 2 * p.ClearanceX;
+        var (minimumBore, maximumBore) = BoreLimits(p);
         var bore = Math.Max(minimumBore, Math.Floor(Math.Min(p.BoreDiameter - 2, maximumBore)));
         return p with
         {

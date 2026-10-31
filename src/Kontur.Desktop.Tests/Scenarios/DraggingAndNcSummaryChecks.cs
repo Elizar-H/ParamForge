@@ -110,12 +110,12 @@ internal static partial class UiSmoke
             ReferenceEquals(inspection, form.Inspection) && inspection.SelectedMoveCount > 0,
             null
         );
-        inspection.WindowState = FormWindowState.Minimized;
+        form.Workspace.SelectedIndex = 0;
         form.OpenInspection();
         Application.DoEvents();
         check(
-            "v26_reopen_restores_minimized_window",
-            inspection.WindowState == FormWindowState.Normal && ReferenceEquals(inspection, form.Inspection),
+            "v212_reopen_selects_existing_tab",
+            form.Workspace.SelectedIndex == 1 && ReferenceEquals(inspection, form.Inspection),
             null
         );
         var project = form.CurrentProject!;

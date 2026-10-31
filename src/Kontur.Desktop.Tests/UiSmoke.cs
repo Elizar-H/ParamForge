@@ -42,7 +42,9 @@ internal static partial class UiSmoke
             );
             Check("twenty_one_main_numeric_inputs", form.MainNumericInputCount == 21, form.MainNumericInputCount);
             Check("default_generation", form.CurrentProject?.Verification.Ok == true && !form.IsStale);
+            Check("v213_tolerances_visible_on_start", form.ToleranceViewVisible && form.Sketch.ShowTolerances && form.DeviationView("length").ShowNumbers);
             form.CaptureForm(Path.Combine(folder, "01-default-1280x850.png"));
+            form.SetToleranceView(false);
             CheckCaptions(form, "default", Check);
             Check(
                 "default_profile_stock_lengths",
@@ -495,11 +497,12 @@ internal static partial class UiSmoke
                     !form.IsStale && beforeCancel == JsonSerializer.Serialize(form.CurrentProject!) && beforeCancelFiles == FileSnapshot(folder), title);
             }
             var originalPartName = form.CurrentProject!.Params.PartName;
-            var processingTitle = CancelOwnModal(form, () => InvokeAction(form, "OpenProcessing"), dialog =>
+            var processingView = OpenProcessingForSmoke(form);
             {
+                var dialog = processingView;
                 Check("stock_profile_fields_only_in_processing", form.MainNumericInputCount == 21 &&
                     Descendants(dialog).OfType<Label>().Any(label => label.Text == "Зазор до кулачков, мм") &&
-                    Descendants(dialog).OfType<Label>().Any(label => label.Text == "Припуск переднего торца, мм"));
+                    Descendants(dialog).OfType<Label>().Any(label => label.Text == "Запас на передний торец, мм"));
                 var pair = Descendants(dialog).OfType<Button>().ToArray();
                 CheckButtonPair(
                     "processing",
@@ -509,11 +512,12 @@ internal static partial class UiSmoke
                 );
                 var partName = Descendants(dialog).OfType<TextBox>().First(box => box.Text == originalPartName);
                 partName.Text = "Discarded QA edit";
-            });
+            }
+            processingView.Close();
             Check(
                 "cancel_processing_discards_dialog_edits",
                 !form.IsStale && beforeCancel == JsonSerializer.Serialize(form.CurrentProject!) && beforeCancelFiles == FileSnapshot(folder),
-                processingTitle
+                "Processing tab cancelled"
             );
 
             var exportParent = Path.Combine(folder, "export-destination");
@@ -554,7 +558,8 @@ internal static partial class UiSmoke
             RunToleranceFlyoutChecks(form, folder, Check);
             RunGeometryAndProcessingChecks(form, folder, Check);
             RunKeyboardAndInspectionChecks(form, folder, Check);
-            form.CaptureProcessingDialog(Path.Combine(folder, "07-processing-dialog.png"));
+            RunWorkspaceAndDiagnosticsChecks(form, folder, Check);
+            form.CaptureProcessingView(Path.Combine(folder, "07-processing-tab.png"));
             form.CaptureExportDialog(files, Path.Combine(folder, "08-export-result-dialog.png"));
         }
         catch (Exception ex) { failures.Add(ex.ToString()); }

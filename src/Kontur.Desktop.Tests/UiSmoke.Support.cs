@@ -90,6 +90,13 @@ internal static partial class UiSmoke
         bitmap.Save(path);
     }
 
+    private static ProcessingView OpenProcessingForSmoke(MainForm form, bool targets = false)
+    {
+        InvokeAction(form, targets ? "ShowTargets" : "OpenProcessing");
+        Application.DoEvents();
+        return form.Processing ?? throw new InvalidOperationException("Processing tab did not open.");
+    }
+
     private static void PressDialogKey(Form dialog, Keys key) =>
         typeof(Form).GetMethod("ProcessDialogKey", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(dialog, [key]);
 

@@ -4,8 +4,8 @@ namespace Kontur.Desktop;
 
 internal sealed partial class MainForm
 {
-    private void OpenProcessing() => ShowProcessing(this, false);
-    private void ShowProcessing(Form owner, bool targets)
+    private void OpenProcessing() => ShowProcessing(false);
+    private void ShowProcessing(bool targets, string? focusKey = null)
     {
         var value = ReadParameters(true, false);
         if (value is null)
@@ -13,12 +13,66 @@ internal sealed partial class MainForm
             return;
         }
 
-        using var dialog = new ProcessingDialog(value, inputs.Keys.ToHashSet(), targets);
-        if (dialog.ShowDialog(owner) == DialogResult.OK)
+        if (processing is null || processing.IsDisposed)
         {
-            SetParameters(dialog.Result!);
-            GenerateNow();
+            processing = new ProcessingView(value, targets) { Dock = DockStyle.Fill };
+            processingPage = new TabPage("Заготовка и обработка") { BackColor = Theme.Surface, Padding = Padding.Empty };
+            processingPage.Controls.Add(processing);
+            workspace.TabPages.Add(processingPage);
+            workspace.SetClosable(processingPage, true);
+            processing.GenerateCandidate = ApplyProcessingCandidate;
+            processing.Accepted += result => { SetParameters(result.Params); GenerateNow(); };
+            processing.Cancelled += CloseProcessing;
         }
+        else
+        {
+            processing.Rebase(value);
+        }
+        workspace.SelectedTab = processingPage;
+        if (focusKey is not null)
+        {
+            processing.FocusField(focusKey);
+        }
+        else if (targets)
+        {
+            processing.Sections.SelectedIndex = 4;
+            processing.FocusField("length");
+        }
+        else
+        {
+            processing.Sections.Navigation.Focus();
+        }
+    }
+
+    private GenerationResult ApplyProcessingCandidate(Parameters draft)
+    {
+        var current = ReadParameters(false, false);
+        if (current is null)
+        {
+            return new(false, [new("length", "Проверьте введённые размеры в геометрии.")], [], null);
+        }
+        foreach (var key in processing!.EditedProperties)
+        {
+            ParameterDraftReader.Property(key).SetValue(current, ParameterDraftReader.Property(key).GetValue(draft));
+        }
+        return Engine.Generate(current);
+    }
+
+    private void CloseProcessing()
+    {
+        if (processingPage is not { } page)
+        {
+            return;
+        }
+        if (workspace.SelectedTab == page)
+        {
+            workspace.SelectedTab = geometryPage;
+        }
+        workspace.SetClosable(page, false);
+        workspace.TabPages.Remove(page);
+        processingPage = null;
+        processing = null;
+        page.Dispose();
     }
 
     internal void OpenInspection()
@@ -30,7 +84,11 @@ internal sealed partial class MainForm
 
         if (inspection is null || inspection.IsDisposed)
         {
-            inspection = new ResultInspectionForm();
+            inspection = new ResultInspectionView { Dock = DockStyle.Fill };
+            inspectionPage = new TabPage("Траектория УП") { BackColor = Theme.Surface, Padding = Padding.Empty };
+            inspectionPage.Controls.Add(inspection);
+            workspace.TabPages.Add(inspectionPage);
+            workspace.SetClosable(inspectionPage, true);
             inspection.ControllerRequested += controller =>
             {
                 if (!GenerateNow())
@@ -41,22 +99,30 @@ internal sealed partial class MainForm
                 SetController(controller);
                 return !stale;
             };
-            inspection.ParametersRequested += () => ShowProcessing(inspection, true);
+            inspection.ParametersRequested += () => ShowProcessing(true);
+            inspection.CloseRequested += CloseInspection;
         }
 
         inspection.SetResult(project);
-        if (!inspection.Visible)
-        {
-            inspection.Show(this);
-        }
+        workspace.SelectedTab = inspectionPage;
+        inspection.Focus();
+    }
 
-        if (inspection.WindowState == FormWindowState.Minimized)
+    private void CloseInspection()
+    {
+        if (inspectionPage is not { } page)
         {
-            inspection.WindowState = FormWindowState.Normal;
+            return;
         }
-
-        inspection.BringToFront();
-        inspection.Activate();
+        if (workspace.SelectedTab == page)
+        {
+            workspace.SelectedTab = geometryPage;
+        }
+        workspace.SetClosable(page, false);
+        workspace.TabPages.Remove(page);
+        inspectionPage = null;
+        inspection = null;
+        page.Dispose();
     }
 
     internal void SetController(string controller)
@@ -71,19 +137,5 @@ internal sealed partial class MainForm
         sketch.Invalidate();
     }
 
-    private void ShowTargets()
-    {
-        var value = ReadParameters(true, false);
-        if (value is null)
-        {
-            return;
-        }
-
-        using var dialog = new ProcessingDialog(value, inputs.Keys.ToHashSet(), true);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            SetParameters(dialog.Result!);
-            GenerateNow();
-        }
-    }
+    private void ShowTargets() => ShowProcessing(true);
 }

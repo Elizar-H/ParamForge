@@ -72,6 +72,7 @@ internal sealed partial class MainForm
 
         dragChanged = nominal != (double)ParameterDraftReader.Property(key).GetValue(dragTransaction.Baseline)!;
         stale = true;
+        status.ForeColor = invalid.Count == 0 ? Theme.Muted : Theme.Error;
         status.Text = invalid.Count == 0 ? "" : InteractionError(invalid, candidate);
         RefreshGeneralDeviations(candidate);
         sketch.Parameters = candidate;
@@ -91,7 +92,7 @@ internal sealed partial class MainForm
             var maximum = Engine.Target(candidate.BoreDiameter, candidate.BoreLowerDeviation, candidate.BoreUpperDeviation) - 2 * (candidate.FinishAllowance + .05);
             if (candidate.AutoStock && maximum < ToolingProfile.BoringMinimumDiameter + 2 * candidate.ClearanceX)
             {
-                return "Для этого d не помещаются текущая оправка и отвод.\nНужны другой инструмент или меньший отвод.";
+                return "Нет подходящего начального отверстия.\nОткройте ограничения заготовки и отвода.";
             }
 
             return $"Отверстие заготовки Ø{NumericText.Format(candidate.StockBore)} слишком велико.\nДля этого d нужно не больше Ø{NumericText.Format(maximum)} мм.";

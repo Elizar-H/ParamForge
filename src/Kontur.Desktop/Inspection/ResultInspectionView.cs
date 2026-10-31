@@ -2,7 +2,7 @@ using Kontur.Core;
 
 namespace Kontur.Desktop;
 
-internal sealed class ResultInspectionForm : Form
+internal sealed class ResultInspectionView : UserControl
 {
     private readonly TransitionGrid transitions = new()
     {
@@ -64,6 +64,8 @@ internal sealed class ResultInspectionForm : Form
     private string? lastTransition, activeTransition;
     internal event Func<string, bool>? ControllerRequested;
     internal event Action? ParametersRequested;
+    internal event Action? CloseRequested;
+    internal void Close() => CloseRequested?.Invoke();
     internal string? CurrentProjectId => project?.Id;
     internal int DisplayedMoveCount => trajectory.MoveCount;
     internal int SelectedMoveCount => trajectory.SelectedCount;
@@ -78,16 +80,13 @@ internal sealed class ResultInspectionForm : Form
     internal CheckBox AllTransitions => all;
 
     internal ParsedNcSummary TransitionSummary(int index) => ParsedNcSummary.From(project!.Verification.Moves, project.Transitions[index].Blocks.ToHashSet());
-    internal ResultInspectionForm()
+    internal ResultInspectionView()
     {
         Text = "Траектория УП — ParamForge";
         Font = Theme.Detail;
         BackColor = Theme.Surface;
         AutoScaleMode = AutoScaleMode.Dpi;
-        var screen = Screen.PrimaryScreen!.WorkingArea;
-        ClientSize = new Size(Math.Min(1580, screen.Width - 80), Math.Min(980, screen.Height - 100));
-        MinimumSize = new Size(1060, 740);
-        StartPosition = FormStartPosition.CenterParent;
+        Name = "ResultInspectionView";
         root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -158,10 +157,10 @@ internal sealed class ResultInspectionForm : Form
         fit.AutoSize = true;
         fit.Margin = new Padding(0, 2, 8, 2);
         fit.Click += (_, _) => trajectory.Fit();
-        var stock = new ToolStripMenuItem("Заготовка и зажим")
+        var stock = new ToolStripMenuItem("Заготовка и зажим (операция 010)")
         {
             CheckOnClick = true,
-            Checked = true
+            Checked = false
         };
         var grid = new ToolStripMenuItem("Координатная сетка")
         {
@@ -209,6 +208,8 @@ internal sealed class ResultInspectionForm : Form
         };
         var display = new ToolStripDropDownButton("Вид");
         display.DropDownItems.AddRange([stock, grid]);
+        ApplicationMenuRenderer.Configure(display);
+        options.Renderer = new ApplicationMenuRenderer();
         options.Items.Add(display);
         toolbar.Controls.AddRange([fit, all, rapids, options]);
         toolbar.SizeChanged += (_, _) => FitTableHeight();

@@ -45,10 +45,11 @@ internal sealed partial class MainForm
         bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
     }
 
-    internal void CaptureProcessingDialog(string path)
+    internal void CaptureProcessingView(string path)
     {
-        using var dialog = new ProcessingDialog(working, inputs.Keys.ToHashSet());
-        CaptureOwnedDialog(dialog, path);
+        OpenProcessing();
+        CaptureForm(path);
+        CloseProcessing();
     }
 
     internal void CaptureExportDialog(IReadOnlyList<string> files, string path)

@@ -104,6 +104,18 @@ internal sealed partial class MainForm
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        if (keyData == (Keys.Control | Keys.W) && workspace.SelectedTab != geometryPage)
+        {
+            if (workspace.SelectedTab == inspectionPage)
+            {
+                CloseInspection();
+            }
+            else if (workspace.SelectedTab == processingPage)
+            {
+                CloseProcessing();
+            }
+            return true;
+        }
         if (keyData == Keys.Escape && dimensionEditor is not null)
         {
             CloseDimensionEditor();
