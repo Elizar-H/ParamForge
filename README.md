@@ -1,4 +1,4 @@
-# ParamForge 2.13.1
+# ParamForge 2.13.2
 
 Настольное приложение Windows для втулки с буртиком. По размерам детали формирует маршрутную карту, операционную карту и управляющую программу.
 
@@ -8,9 +8,9 @@
 
 ## Запуск и геометрия
 
-Готовая программа: скачайте архив `ParamForge-2.13.1-win-x64.zip` из [Releases](https://github.com/Elizar-H/ParamForge/releases), распакуйте и откройте `ParamForge.exe`. Установка .NET не нужна.
+Готовая программа: [скачать ParamForge-2.13.2-win-x64.zip](https://github.com/Elizar-H/ParamForge/releases/download/v2.13.2/ParamForge-2.13.2-win-x64.zip), распаковать целиком и открыть `ParamForge.exe`. Установка .NET не нужна. Архив `source.zip` в [Releases](https://github.com/Elizar-H/ParamForge/releases/latest) предназначен для исходников.
 
-В локальном проекте после сборки откройте `Запустить.cmd` или `release/ParamForge-2.13.1/ParamForge.exe`.
+В локальном проекте после сборки откройте `Запустить.cmd` или `release/ParamForge-2.13.2/ParamForge.exe`.
 
 Строки геометрии имеют высоту по содержимому и не растягиваются при увеличении окна. Номиналы и заголовки выровнены по общим столбцам; щелчок в любой части числовой ячейки выделяет число. При фокусе поле подчёркивается, белая заливка не появляется. Enter подтверждает ввод, Esc возвращает сохранённый номинал. Стрелки ↑/↓ подтверждают корректный ввод и переходят к соседнему номиналу, выделяя его целиком. Временно несовместимые размеры не мешают продолжать ввод следующего поля; выпуск УП блокируется до исправления геометрии.
 
@@ -93,6 +93,6 @@ dotnet run --project src/Kontur.Tests -c Release -- --report qa/tests.json
 
 Устройство рамок и принятые решения по формам описаны в [DOCUMENT_FORMS.md](docs/DOCUMENT_FORMS.md).
 
-Результаты текущей проверки описаны в [VALIDATION_2.13.1.md](docs/VALIDATION_2.13.1.md) и [VALIDATION_2.13.md](docs/VALIDATION_2.13.md); предыдущие — [VALIDATION_2.12.md](docs/VALIDATION_2.12.md), [VALIDATION_2.11.md](docs/VALIDATION_2.11.md), [VALIDATION_2.10.md](docs/VALIDATION_2.10.md), [VALIDATION_2.9.md](docs/VALIDATION_2.9.md), [VALIDATION_2.8.md](docs/VALIDATION_2.8.md), [VALIDATION_2.7.md](docs/VALIDATION_2.7.md), [VALIDATION_2.6.md](docs/VALIDATION_2.6.md), [VALIDATION_2.5.md](docs/VALIDATION_2.5.md) и [VALIDATION_2.4.md](docs/VALIDATION_2.4.md).
+Результаты текущей проверки описаны в [VALIDATION_2.13.2.md](docs/VALIDATION_2.13.2.md) и [VALIDATION_2.13.md](docs/VALIDATION_2.13.md); предыдущие — [VALIDATION_2.12.md](docs/VALIDATION_2.12.md), [VALIDATION_2.11.md](docs/VALIDATION_2.11.md), [VALIDATION_2.10.md](docs/VALIDATION_2.10.md), [VALIDATION_2.9.md](docs/VALIDATION_2.9.md), [VALIDATION_2.8.md](docs/VALIDATION_2.8.md), [VALIDATION_2.7.md](docs/VALIDATION_2.7.md), [VALIDATION_2.6.md](docs/VALIDATION_2.6.md), [VALIDATION_2.5.md](docs/VALIDATION_2.5.md) и [VALIDATION_2.4.md](docs/VALIDATION_2.4.md).
 
 ![Окно ParamForge](docs/native-window.png)

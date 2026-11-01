@@ -174,6 +174,21 @@ internal static partial class UiSmoke
         form.SetToleranceView(false);
         form.SetParameters(Engine.Defaults);
         form.GenerateNow();
+        var closedViews = new List<Control>();
+        for (var cycle = 0; cycle < 25; cycle++)
+        {
+            form.OpenInspection();
+            closedViews.Add(form.Inspection!);
+            PressWorkspaceClose(form);
+            var settings = OpenProcessingForSmoke(form);
+            settings.Field("feedRough").Text = "0,3";
+            closedViews.Add(settings);
+            PressWorkspaceClose(form);
+        }
+        Application.DoEvents();
+        check("v2132_repeated_tabs_dispose_all_views", closedViews.All(view => view.IsDisposed && !view.IsHandleCreated)
+            && workspace.TabCount == 1 && form.Processing is null && form.Inspection is null, closedViews.Count);
+        check("v2132_repeated_cancel_preserves_parameters", form.CurrentProject!.Params == Engine.Defaults && !form.IsStale, null);
     }
 
     private static void PressProcessingKey(Control control, Keys key) => typeof(Control).GetMethod("OnKeyDown", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(control, [new KeyEventArgs(key)]);

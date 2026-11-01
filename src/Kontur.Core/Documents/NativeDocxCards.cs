@@ -30,9 +30,9 @@ internal static class NativeDocxCards
     private static int Mm(double n) => (int)Math.Round(n * 1440 / 25.4);
     private static XElement Val(string n, string v) => new(W + n, new XAttribute(W + "val", v));
     private sealed record Cell(double Width, string Text = "", bool Center = false, bool Bold = false,
-        int Font = 18, string? Merge = null, bool NoBorders = false, bool Frame = false);
+        int Font = 18, string? Merge = null, bool NoBorders = false, bool Frame = false, bool FitLine = false);
 
-    private static XElement P(string text, int font = 18, bool bold = false, string align = "left", bool pageBreak = false)
+    private static XElement P(string text, int font = 18, bool bold = false, string align = "left", bool pageBreak = false, int? fitWidth = null)
     {
         var pr = new XElement(W + "pPr", pageBreak ? new XElement(W + "pageBreakBefore") : null,
             new XElement(
@@ -48,7 +48,8 @@ internal static class NativeDocxCards
                 Val("szCs", font.ToString(CultureInfo.InvariantCulture))
             ));
         var run = new XElement(W + "r", new XElement(W + "rPr", bold ? new XElement(W + "b") : null,
-            Val("color", "000000"), Val("sz", font.ToString(CultureInfo.InvariantCulture)), Val("szCs", font.ToString(CultureInfo.InvariantCulture))));
+            Val("color", "000000"), Val("sz", font.ToString(CultureInfo.InvariantCulture)), Val("szCs", font.ToString(CultureInfo.InvariantCulture)),
+            fitWidth is int width ? Val("fitText", width.ToString(CultureInfo.InvariantCulture)) : null));
         var pieces = text.Split('\n');
         for (var i = 0; i < pieces.Length; i++)
         {
@@ -115,7 +116,12 @@ internal static class NativeDocxCards
                 ));
             }
             pr.Add(Val("vAlign", "center"));
-            var tc = new XElement(W + "tc", pr, P(c.Text, c.Font, c.Bold, c.Center ? "center" : "left"));
+            // One-line header fields cannot grow vertically. Fit the entire run, because
+            // Word's tcFitText can still wrap and clip its last characters in an exact-height row.
+            // A conservative one-em-per-character bound keeps short values at their natural width.
+            var lineWidth = Mm(c.Width) - 110; // 45 twips per side, plus 20 twips rounding clearance.
+            int? fitWidth = c.FitLine && c.Text.Length * c.Font * 10 > lineWidth ? lineWidth : null;
+            var tc = new XElement(W + "tc", pr, P(c.Text, c.Font, c.Bold, c.Center ? "center" : "left", fitWidth: fitWidth));
             tr.Add(tc);
             x += c.Width;
         }
@@ -167,7 +173,7 @@ internal static class NativeDocxCards
         string[] names = [p.Params.Developer, p.Params.Checker, p.Params.RateSetter, "", p.Params.NormController];
         for (var i = 0; i < 5; i++)
         {
-            var cells = new List<Cell> { new(23.4, labels[i], Font: 14), new(36.4, names[i], Font: 14), new(20.8), new(15.6) };
+            var cells = new List<Cell> { new(23.4, labels[i], Font: 14), new(36.4, names[i], Font: 14, FitLine: true), new(20.8), new(15.6) };
             if (i < 3)
             {
                 var merge = i == 0 ? "restart" : "continue";
@@ -336,7 +342,7 @@ internal static class NativeDocxCards
             var p = project.Params;
             var c = project.Calculations;
             var values = new[] { "Токарная с ЧПУ", p.Material, "≤197 HB", "", "", $"Ø{F(p.StockDiameter)}/Ø{F(p.StockBore)} × {F(c.StockLength)}", "", "" };
-            Row(t, 4.25, widths.Select((w, i) => new Cell(w, values[i], true)), true);
+            Row(t, 4.25, widths.Select((w, i) => new Cell(w, values[i], true, FitLine: i == 1)), true);
             widths = [78, 65, 18.2, 20.8, 18.2, 20.8, 65];
             labels = ["Оборудование, устройство ЧПУ", "Обозначение программы", "То", "Тв", "Тпз", "Тшт.", "СОЖ"];
             Row(t, 4.25, widths.Select((w, i) => new Cell(w, labels[i], true, Font: 14)), true);

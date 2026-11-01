@@ -32,18 +32,18 @@ internal static class HtmlCards
         var p = project.Params;
         var c = project.Calculations;
         var body = new StringBuilder(Header(project, "Технологическая карта операции 010"));
-        body.Append($"<p>Зажим за хвостовик {F(p.GripLength)} мм. Заготовка Ø{F(p.StockDiameter)}/Ø{F(p.StockBore)} × {F(c.StockLength)} мм после005; до005 {F(c.RawStockLength)} мм, рез {F(c.CutoffWidth)} мм, кулачки Z{F(c.JawsFrontZ)}. T1: {Esc(ToolingProfile.ExternalTool)}; T2: {Esc(ToolingProfile.BoringTool)}; пластина {Esc(ToolingProfile.Insert)}. Сопряжения R≤{F(ToolingProfile.MaximumCornerRadius)} мм.</p>");
+        body.Append(CultureInfo.InvariantCulture, $"<p>Зажим за хвостовик {F(p.GripLength)} мм. Заготовка Ø{F(p.StockDiameter)}/Ø{F(p.StockBore)} × {F(c.StockLength)} мм после005; до005 {F(c.RawStockLength)} мм, рез {F(c.CutoffWidth)} мм, кулачки Z{F(c.JawsFrontZ)}. T1: {Esc(ToolingProfile.ExternalTool)}; T2: {Esc(ToolingProfile.BoringTool)}; пластина {Esc(ToolingProfile.Insert)}. Сопряжения R≤{F(ToolingProfile.MaximumCornerRadius)} мм.</p>");
         body.Append(Tolerances(project));
         body.Append("<table><thead><tr><th>Переход</th><th>Содержание / Z мм</th><th>Инструмент</th><th>X проходов, диаметры мм</th><th>Число</th><th>Фактический max ap мм</th><th>n об/мин</th><th>f мм/об</th><th>t G1 мин</th><th>Кадры движений</th></tr></thead><tbody>");
         foreach (var t in project.Transitions)
         {
-            body.Append($"<tr><td>{Esc(t.Id)}</td><td>{Esc(t.Title)}<br>Z {F(t.ZStart)} → {F(t.ZEnd)}</td><td>{Esc(t.Tool)}</td><td>{string.Join("; ", t.Passes.Select(F))}</td><td>{t.Passes.Count}</td><td>{t.ActualMaximumDepth.ToString("0.####", CultureInfo.GetCultureInfo("ru-RU"))}</td><td>{F(t.Rpm)}</td><td>{F(t.Feed)}</td><td>{t.CutMinutes.ToString("F3", CultureInfo.InvariantCulture)}</td><td>N{t.Blocks.First()}–N{t.Blocks.Last()}</td></tr>");
+            body.Append(CultureInfo.InvariantCulture, $"<tr><td>{Esc(t.Id)}</td><td>{Esc(t.Title)}<br>Z {F(t.ZStart)} → {F(t.ZEnd)}</td><td>{Esc(t.Tool)}</td><td>{string.Join("; ", t.Passes.Select(F))}</td><td>{t.Passes.Count}</td><td>{t.ActualMaximumDepth.ToString("0.####", CultureInfo.GetCultureInfo("ru-RU"))}</td><td>{F(t.Rpm)}</td><td>{F(t.Feed)}</td><td>{t.CutMinutes.ToString("F3", CultureInfo.InvariantCulture)}</td><td>N{t.Blocks.First()}–N{t.Blocks.Last()}</td></tr>");
         }
 
-        body.Append($"</tbody></table><p>Сумма времени G1: <strong>{c.TotalCutMinutes.ToString("F3", CultureInfo.InvariantCulture)} мин</strong>. Это не штучное время и не норматив производительности.</p><h2>Операции вне УП</h2>");
+        body.Append(CultureInfo.InvariantCulture, $"</tbody></table><p>Сумма времени G1: <strong>{c.TotalCutMinutes.ToString("F3", CultureInfo.InvariantCulture)} мин</strong>. Это не штучное время и не норматив производительности.</p><h2>Операции вне УП</h2>");
         foreach (var o in project.Operations.Where(o => o.Kind == "manual"))
         {
-            body.Append($"<p><strong>{Esc(o.Code)} {Esc(o.Title)}</strong>: {Esc(o.Description)}</p>");
+            body.Append(CultureInfo.InvariantCulture, $"<p><strong>{Esc(o.Code)} {Esc(o.Title)}</strong>: {Esc(o.Description)}</p>");
         }
 
         body.Append(ParametersTable(p));

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$OutputDirectory = '',
     [switch]$SkipChecks
 )
@@ -42,10 +42,14 @@ invalid-wall.json специально содержит ошибку для пр
 
 Исходники и описание: https://github.com/Elizar-H/ParamForge
 Версия исходников: $commit
-"@ | Set-Content -LiteralPath (Join-Path $appPath 'Прочитать.txt') -Encoding utf8BOM
+"@ | Set-Content -LiteralPath (Join-Path $appPath 'Прочитать.txt') -Encoding UTF8
 $applicationZip = Join-Path $OutputDirectory ($appName + '.zip')
 $sourceZip = Join-Path $OutputDirectory ('ParamForge-' + $version + '-source.zip')
 Compress-Archive -LiteralPath $appPath -DestinationPath $applicationZip -Force
+# Verify the archive a user will actually extract, including its bundled runtime.
+$unpacked = Join-Path $stage 'unpacked archive'
+Expand-Archive -LiteralPath $applicationZip -DestinationPath $unpacked
+& (Join-Path $PSScriptRoot 'test-startup.ps1') -Executable (Join-Path $unpacked ($appName + '\ParamForge.exe')) -OutputDirectory (Join-Path $stage 'startup-checks') -IsolateRuntime
 & git archive --format=zip ('--prefix=ParamForge-' + $version + '-source/') ('--output=' + $sourceZip) $commit
 if ($LASTEXITCODE -ne 0) { throw 'Не удалось подготовить архив исходников.' }
 @($applicationZip, $sourceZip) | ForEach-Object {

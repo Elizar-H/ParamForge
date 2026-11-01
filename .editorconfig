@@ -11,6 +11,9 @@ trim_trailing_whitespace = true
 [*.{sln,csproj,props,json}]
 indent_size = 2
 
+[*.ps1]
+charset = utf-8-bom
+
 [*.cs]
 # Microsoft C# conventions, adapted to this existing WinForms codebase.
 dotnet_sort_system_directives_first = true

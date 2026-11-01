@@ -26,7 +26,7 @@ internal sealed class ResultInspectionView : UserControl
         ReadOnly = true,
         WordWrap = false,
         DetectUrls = false,
-        Font = new Font("Consolas", 10),
+        Font = Theme.Code,
         BackColor = Color.White,
         BorderStyle = BorderStyle.None
     };

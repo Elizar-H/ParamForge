@@ -5,6 +5,7 @@ internal sealed class WorkspaceTabs : TabControl
 {
     private readonly HashSet<TabPage> closable = [];
     private TabPage? pressedClose, hoveredClose;
+    private bool paddingUpdatePending;
     internal event Action<TabPage>? CloseRequested;
     internal void SetClosable(TabPage page, bool value)
     {
@@ -43,7 +44,7 @@ internal sealed class WorkspaceTabs : TabControl
         Font = Theme.Detail;
         DrawMode = TabDrawMode.OwnerDrawFixed;
         Padding = new Point(Math.Max(32, Font.Height + 12), 7);
-        FontChanged += (_, _) => Padding = new Point(Math.Max(32, Font.Height + 12), 7);
+        FontChanged += (_, _) => QueuePaddingUpdate();
         DrawItem += (_, e) =>
         {
             var selected = e.Index == SelectedIndex;
@@ -77,6 +78,27 @@ internal sealed class WorkspaceTabs : TabControl
                 e.Graphics.DrawLine(pen, e.Bounds.Left + 10, e.Bounds.Bottom - 2, e.Bounds.Right - 10, e.Bounds.Bottom - 2);
             }
         };
+    }
+
+    private void QueuePaddingUpdate()
+    {
+        if (!IsHandleCreated || IsDisposed || paddingUpdatePending)
+        {
+            return;
+        }
+
+        // A per-monitor DPI adjustment can change Font inside CreateWindowEx.
+        // TabControl.Padding recreates the native handle: defer it until that
+        // creation has returned to the message loop, or Windows reports 1400.
+        paddingUpdatePending = true;
+        BeginInvoke(() =>
+        {
+            paddingUpdatePending = false;
+            if (!IsDisposed)
+            {
+                Padding = new Point(Math.Max(32, Font.Height + 12), 7);
+            }
+        });
     }
 
     protected override void OnMouseDown(MouseEventArgs e)

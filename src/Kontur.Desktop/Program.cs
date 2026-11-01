@@ -2,15 +2,21 @@ namespace Kontur.Desktop;
 
 internal static class Program
 {
+    private static StartupCheck? startupCheck;
+    private static bool reportingFailure;
+
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += (_, args) => ReportFailure(args.Exception);
         try
         {
+            startupCheck = StartupCheck.Parse(args);
             DesktopApplication.Initialize();
-            Application.Run(new MainForm());
+            using var form = new MainForm();
+            startupCheck?.Attach(form);
+            Application.Run(form);
         }
         catch (Exception exception)
         {
@@ -19,11 +25,29 @@ internal static class Program
     }
     private static void ReportFailure(Exception exception)
     {
-        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ParamForge", "Logs");
-        Directory.CreateDirectory(folder);
-        var path = Path.Combine(folder, "error-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") + ".txt");
-        File.WriteAllText(path, exception.ToString());
-        MessageBox.Show("Не удалось открыть ParamForge. Подробности сохранены:\n" + path, "ParamForge", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        Application.Exit();
+        Environment.ExitCode = 1;
+        if (reportingFailure)
+        {
+            return;
+        }
+        reportingFailure = true;
+        var path = FailureLog.TryWrite(exception);
+        try
+        {
+            if (startupCheck is not null)
+            {
+                startupCheck.Fail(exception);
+            }
+            else
+            {
+                MessageBox.Show("Не удалось продолжить работу ParamForge.\n" +
+                    (path is null ? exception.Message : "Подробности сохранены:\n" + path),
+                    "ParamForge", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+        finally
+        {
+            Application.Exit();
+        }
     }
 }

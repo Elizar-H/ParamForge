@@ -1,4 +1,4 @@
-param([switch]$Ui)
+﻿param([switch]$Ui)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
@@ -22,7 +22,8 @@ if ($Ui) {
     $outputDirectory = Join-Path $projectRoot ('qa\' + $runName)
     & dotnet run --project src/Kontur.Desktop.Tests -c Release --no-build -- --smoke-output $outputDirectory
     if ($LASTEXITCODE -ne 0) { throw ('Проверки интерфейса завершились с ошибкой: ' + $outputDirectory) }
-    $uiReport = Get-Content -LiteralPath (Join-Path $outputDirectory 'ui-smoke.json') -Raw | ConvertFrom-Json -AsHashtable
+    $uiReport = Get-Content -LiteralPath (Join-Path $outputDirectory 'ui-smoke.json') -Raw | ConvertFrom-Json
     Write-Output ('UI: {0}/{1}' -f ($uiReport.checks | Where-Object passed).Count, $uiReport.checks.Count)
     Write-Output $outputDirectory
+    & (Join-Path $PSScriptRoot 'test-startup.ps1') -Executable (Join-Path $projectRoot 'src\Kontur.Desktop\bin\Release\net10.0-windows\ParamForge.exe')
 }

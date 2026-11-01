@@ -13,6 +13,7 @@ internal static class Theme
     internal static readonly Font Strong = new("Segoe UI Semibold", 10F);
     internal static readonly Font Numeric = new("Segoe UI", 10.5F);
     internal static readonly Font Detail = new("Segoe UI", 9.5F);
+    internal static readonly Font Code = new("Consolas", 10F);
 
     internal static Button Button(string text, bool primary = false) => new()
     {

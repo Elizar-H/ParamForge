@@ -1,3 +1,4 @@
+using System.Xml;
 using static Kontur.Core.Engine;
 
 namespace Kontur.Core;
@@ -56,7 +57,7 @@ internal static class ParameterValidator
 
         )
         {
-            if (string.IsNullOrWhiteSpace(value) || value.Length > maximum || value.Any(c => char.IsControl(c) || c is '\u2028' or '\u2029'))
+            if (string.IsNullOrWhiteSpace(value) || value.Length > maximum || !ValidDocumentText(value))
             {
                 Error(key, $"{label}: от 1 до {maximum} символов без переносов строки и управляющих символов.");
             }
@@ -65,7 +66,7 @@ internal static class ParameterValidator
         foreach (var (key, label, maximum) in CardFields.Fields)
         {
             var value = CardFields.Value(p, key);
-            if (value is null || value.Length > maximum || value.Any(c => char.IsControl(c) || c is '\u2028' or '\u2029'))
+            if (value is null || value.Length > maximum || !ValidDocumentText(value))
             {
                 Error(key, $"{label}: не более {maximum} символов без переносов строки.");
             }
@@ -274,5 +275,22 @@ internal static class ParameterValidator
         }
 
         return errors;
+    }
+
+    private static bool ValidDocumentText(string value)
+    {
+        if (value.Any(c => char.IsControl(c) || c is '\u2028' or '\u2029'))
+        {
+            return false;
+        }
+        try
+        {
+            XmlConvert.VerifyXmlChars(value);
+            return true;
+        }
+        catch (XmlException)
+        {
+            return false;
+        }
     }
 }

@@ -4,6 +4,7 @@ internal static partial class RegressionSuite
 {
     private static void RegisterTests()
     {
+        RegisterAuditTests();
         RegisterStandardToleranceAndControllerTests();
 
         RegisterWordBorderTests();
