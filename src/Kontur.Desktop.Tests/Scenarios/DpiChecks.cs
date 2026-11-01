@@ -12,7 +12,7 @@ internal static partial class UiSmoke
         {
             try
             {
-                using (var settingsForm = new MainForm())
+                using (var settingsForm = CreateFormForSmoke())
                 {
                     settingsForm.Show();
                     var settings = OpenProcessingForSmoke(settingsForm);
@@ -24,7 +24,7 @@ internal static partial class UiSmoke
                         .All(((WorkspaceTabs)settingsForm.Workspace).CaptionFits), null);
                     settingsForm.Close();
                 }
-                using var simulated = new MainForm();
+                using var simulated = CreateFormForSmoke();
                 simulated.Sketch.SimulatedModifiers = Keys.None;
                 simulated.Sketch.SyntheticInput = true;
                 simulated.Show();

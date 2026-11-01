@@ -30,5 +30,7 @@ jobs:
           name: windows-verification
           path: |
             qa/**/*.json
+            qa/**/*.png
             release/stage-*/startup-checks/**/*.json
+            release/stage-*/startup-checks/**/*.png
           retention-days: 14
