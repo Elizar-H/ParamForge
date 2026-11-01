@@ -26,7 +26,7 @@ internal static partial class UiSmoke
         }
         try
         {
-            using var form = CreateFormForSmoke();
+            using var form = new MainForm();
             form.Sketch.SimulatedModifiers = Keys.None;
             form.Sketch.SyntheticInput = true;
             form.Show();

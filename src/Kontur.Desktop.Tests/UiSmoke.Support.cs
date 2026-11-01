@@ -8,15 +8,8 @@ namespace Kontur.Desktop;
 
 internal static partial class UiSmoke
 {
-    private static MainForm CreateFormForSmoke() => new()
-    {
-        // DrawToBitmap checks a requested layout, even on a small CI virtual display.
-        // Without an explicit maximum, Windows clamps the form to the desktop and
-        // a simulated 200% layout silently becomes a different, much smaller case.
-        MaximumSize = new Size(16384, 16384),
-        MinimumSize = new Size(1188, 794),
-        ClientSize = new Size(1280, 850)
-    };
+
+
     private static void CheckCaptions(MainForm form, string name, Action<string, bool, object?> check)
     {
         var labels = Descendants(form).OfType<Label>().Where(label => label.Name.StartsWith("dimension_caption_", StringComparison.Ordinal)).ToArray();

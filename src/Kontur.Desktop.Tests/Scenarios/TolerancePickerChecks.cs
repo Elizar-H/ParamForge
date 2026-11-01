@@ -123,7 +123,7 @@ internal static partial class UiSmoke
         form.GenerateNow();
         foreach (var targetDpi in new[] { 96, 120, 144, 192 })
         {
-            using var scaled = CreateFormForSmoke();
+            using var scaled = new MainForm();
             scaled.Show();
             Application.DoEvents();
             OpenSideEditor(scaled, "boreDiameter");

@@ -17,9 +17,11 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-      - name: Build, core and UI checks (Windows PowerShell 5.1)
+      # Hosted Windows has a small virtual desktop; large-DPI layout checks run
+      # locally with check.ps1 -Ui. The packaged EXE still starts below on CI.
+      - name: Build, style and core checks (Windows PowerShell 5.1)
         shell: powershell
-        run: .\scripts\check.ps1 -Ui
+        run: .\scripts\check.ps1
       - name: Package and launch the extracted standalone application
         shell: powershell
         run: .\scripts\package-release.ps1 -SkipChecks
