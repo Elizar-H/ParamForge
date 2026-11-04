@@ -1,0 +1,49 @@
+{
+  "version": 5,
+  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "architecture": { "value": "x64", "strategy": "external" },
+      "toolset": { "value": "host=x64", "strategy": "external" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl",
+        "BUILD_TESTING": false
+      },
+      "environment": { "VSLANG": "1033" }
+    },
+    {
+      "name": "windows-debug",
+      "displayName": "Windows x64 Debug",
+      "inherits": "windows-base",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Windows x64 Release",
+      "inherits": "windows-base",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "windows-checks",
+      "displayName": "Windows x64 Checks",
+      "inherits": "windows-release",
+      "binaryDir": "${sourceDir}/build/checks",
+      "cacheVariables": { "BUILD_TESTING": true }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-debug", "configurePreset": "windows-debug", "jobs": 4 },
+    { "name": "windows-release", "configurePreset": "windows-release", "jobs": 4 },
+    { "name": "windows-checks", "configurePreset": "windows-checks", "jobs": 4 }
+  ],
+  "testPresets": [
+    { "name": "windows-checks", "configurePreset": "windows-checks", "output": { "outputOnFailure": true } }
+  ]
+}

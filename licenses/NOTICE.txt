@@ -1,0 +1,12 @@
+ParamForge uses Qt 6.12.0, copyright The Qt Company Ltd. and other contributors.
+Qt is dynamically linked under the GNU Lesser General Public License version 3.
+The license texts and upstream third-party attributions accompany this notice.
+Qt source: https://download.qt.io/archive/qt/6.12/6.12.0/submodules/
+Qt repository: https://github.com/qt/qtbase/tree/v6.12.0
+
+Qt DLLs can be replaced with interface-compatible builds. Do not remove the
+Windows platform plugin required for startup.
+
+nlohmann/json 3.12.0: https://github.com/nlohmann/json/tree/v3.12.0
+miniz 3.1.2: https://github.com/richgel999/miniz/tree/3.1.2
+Their license and copyright notices are included in this directory.

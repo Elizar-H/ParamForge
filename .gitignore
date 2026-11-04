@@ -1,11 +1,8 @@
-**/bin/
-**/obj/
 .vs/
-.dotnet/
-qa/
-output/
-release/
+.qt/
+build/
+app/
+CMakeUserPresets.json
 *.user
 *.suo
-test-evidence/
-docs/REVISION_REVIEW.md
+*.aps

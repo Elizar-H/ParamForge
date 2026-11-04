@@ -1,0 +1,641 @@
+{
+  "defaults": {
+    "controller": "axioma",
+    "lengthTolerance": "",
+    "flangeTolerance": "",
+    "boreTolerance": "",
+    "counterboreTolerance": "",
+    "counterboreDepthTolerance": "",
+    "bodyTolerance": "",
+    "flangeWidthTolerance": "",
+    "bodyLowerDeviation": -0.3,
+    "bodyUpperDeviation": 0.3,
+    "flangeWidthLowerDeviation": -0.2,
+    "flangeWidthUpperDeviation": 0.2,
+    "autoStock": false,
+    "autoBlankLength": true,
+    "autoBlankOverhang": true,
+    "blankLength": 157.5,
+    "blankOverhang": 132.5,
+    "organization": "\u041c\u0413\u0422\u0423 \u00ab\u0421\u0422\u0410\u041d\u041a\u0418\u041d\u00bb",
+    "drawingNumber": "\u0410\u0414\u0411-23-08.001",
+    "developer": "\u0425\u0443\u0434\u044f\u043a\u043e\u0432 \u0415. \u041d.",
+    "checker": "\u0410\u0431\u0440\u043e\u0441\u0438\u043c\u043e\u0432 \u041c. \u0410.",
+    "rateSetter": "",
+    "normController": "",
+    "partName": "\u0412\u0442\u0443\u043b\u043a\u0430 \u0441 \u0431\u0443\u0440\u0442\u0438\u043a\u043e\u043c",
+    "material": "\u0421\u0442\u0430\u043b\u044c 45",
+    "length": 116,
+    "flangeDiameter": 120,
+    "bodyDiameter": 100,
+    "flangeWidth": 12,
+    "boreDiameter": 47.3,
+    "counterboreDiameter": 75,
+    "counterboreDepth": 28,
+    "stockDiameter": 124,
+    "stockBore": 45,
+    "trimAllowance": 2,
+    "gripLength": 25,
+    "chuckClearance": 10,
+    "frontFacingAllowance": 2,
+    "depthOutside": 2,
+    "depthInside": 1,
+    "finishAllowance": 0.2,
+    "cuttingSpeed": 80,
+    "feedRough": 0.2,
+    "feedFinish": 0.1,
+    "rpmMax": 1200,
+    "clearanceX": 2,
+    "clearanceZ": 3,
+    "boreLowerDeviation": 0,
+    "boreUpperDeviation": 1,
+    "counterboreLowerDeviation": 0,
+    "counterboreUpperDeviation": 0.74,
+    "flangeLowerDeviation": -0.87,
+    "flangeUpperDeviation": 0,
+    "lengthLowerDeviation": -1,
+    "lengthUpperDeviation": 0,
+    "counterboreDepthLowerDeviation": -0.18,
+    "counterboreDepthUpperDeviation": 0.18,
+    "boringTool": "a32t",
+    "boringOverhang": 125,
+    "boringClamp": 128,
+    "customBoringName": "\u0421\u0432\u043e\u044f \u043e\u043f\u0440\u0430\u0432\u043a\u0430",
+    "customBoringDiameter": 32,
+    "customBoringMinBore": 40,
+    "customBoringOffset": 22,
+    "customBoringLength": 400,
+    "customBoringMaxOverhang": 250,
+    "cutoffWidth": 3
+  },
+  "fields": [
+    {
+      "key": "length",
+      "label": "\u0414\u043b\u0438\u043d\u0430 L",
+      "unit": "\u043c\u043c",
+      "group": "\u0413\u0435\u043e\u043c\u0435\u0442\u0440\u0438\u044f",
+      "min": 20,
+      "max": 250,
+      "step": 0.1,
+      "note": "\u041d\u043e\u043c\u0438\u043d\u0430\u043b\u044c\u043d\u0430\u044f \u0434\u043b\u0438\u043d\u0430 \u0434\u0435\u0442\u0430\u043b\u0438 \u043f\u043e\u0441\u043b\u0435 \u0434\u043e\u0432\u043e\u0434\u043a\u0438 \u0437\u0430\u0434\u043d\u0435\u0433\u043e \u0442\u043e\u0440\u0446\u0430"
+    },
+    {
+      "key": "flangeDiameter",
+      "label": "\u0414\u0438\u0430\u043c\u0435\u0442\u0440 \u0431\u0443\u0440\u0442\u0438\u043a\u0430 D",
+      "unit": "\u043c\u043c",
+      "group": "\u0413\u0435\u043e\u043c\u0435\u0442\u0440\u0438\u044f",
+      "min": 30,
+      "max": 200,
+      "step": 0.1,
+      "note": "\u041d\u043e\u043c\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u043d\u0430\u0440\u0443\u0436\u043d\u044b\u0439 \u0434\u0438\u0430\u043c\u0435\u0442\u0440 \u0431\u0443\u0440\u0442\u0438\u043a\u0430"
+    },
+    {
+      "key": "bodyDiameter",
+      "label": "\u0414\u0438\u0430\u043c\u0435\u0442\u0440 \u0442\u0435\u043b\u0430 Db",
+      "unit": "\u043c\u043c",
+      "group": "\u0413\u0435\u043e\u043c\u0435\u0442\u0440\u0438\u044f",
+      "min": 25,
+      "max": 195,
+      "step": 0.1,
+      "note": "\u041d\u0430\u0440\u0443\u0436\u043d\u044b\u0439 \u0434\u0438\u0430\u043c\u0435\u0442\u0440 \u0442\u0435\u043b\u0430 \u0437\u0430 \u0431\u0443\u0440\u0442\u0438\u043a\u043e\u043c"
+    },
+    {
+      "key": "flangeWidth",
+      "label": "\u0428\u0438\u0440\u0438\u043d\u0430 \u0431\u0443\u0440\u0442\u0438\u043a\u0430 b",
+      "unit": "\u043c\u043c",
+      "group": "\u0413\u0435\u043e\u043c\u0435\u0442\u0440\u0438\u044f",
+      "min": 2,
+      "max": 60,
+      "step": 0.1,
+      "note": "\u041e\u0441\u0435\u0432\u043e\u0439 \u0440\u0430\u0437\u043c\u0435\u0440 \u0431\u0443\u0440\u0442\u0438\u043a\u0430 \u043e\u0442 \u043f\u0435\u0440\u0435\u0434\u043d\u0435\u0433\u043e \u0442\u043e\u0440\u0446\u0430"
+    },
+    {
+      "key": "boreDiameter",
+      "label": "\u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0435 \u043e\u0442\u0432\u0435\u0440\u0441\u0442\u0438\u0435 d",
+      "unit": "\u043c\u043c",
+      "group": "\u0413\u0435\u043e\u043c\u0435\u0442\u0440\u0438\u044f",
+      "min": 20,
+      "max": 160,
+      "step": 0.1,
+      "note": "\u041d\u043e\u043c\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0434\u0438\u0430\u043c\u0435\u0442\u0440 \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0433\u043e \u0441\u043a\u0432\u043e\u0437\u043d\u043e\u0433\u043e \u043e\u0442\u0432\u0435\u0440\u0441\u0442\u0438\u044f"
+    },
+    {
+      "key": "counterboreDiameter",
+      "label": "\u0414\u0438\u0430\u043c\u0435\u0442\u0440 \u0440\u0430\u0441\u0442\u043e\u0447\u043a\u0438 d2",
+      "unit": "\u043c\u043c",
+      "group": "\u0413\u0435\u043e\u043c\u0435\u0442\u0440\u0438\u044f",
+      "min": 22,
+      "max": 180,
+      "step": 0.1,
+      "note": "\u041d\u043e\u043c\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0434\u0438\u0430\u043c\u0435\u0442\u0440 \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0439 \u0441\u0442\u0443\u043f\u0435\u043d\u0438"
+    },
+    {
+      "key": "counterboreDepth",
+      "label": "\u0413\u043b\u0443\u0431\u0438\u043d\u0430 \u0440\u0430\u0441\u0442\u043e\u0447\u043a\u0438 h",
+      "unit": "\u043c\u043c",
+      "group": "\u0413\u0435\u043e\u043c\u0435\u0442\u0440\u0438\u044f",
+      "min": 1,
+      "max": 240,
+      "step": 0.1,
+      "note": "\u0413\u043b\u0443\u0431\u0438\u043d\u0430 \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0439 \u0441\u0442\u0443\u043f\u0435\u043d\u0438 \u043e\u0442 \u043f\u0435\u0440\u0435\u0434\u043d\u0435\u0433\u043e \u0442\u043e\u0440\u0446\u0430"
+    },
+    {
+      "key": "stockDiameter",
+      "label": "\u041d\u0430\u0440\u0443\u0436\u043d\u044b\u0439 \u0434\u0438\u0430\u043c\u0435\u0442\u0440 \u0437\u0430\u0433\u043e\u0442\u043e\u0432\u043a\u0438",
+      "unit": "\u043c\u043c",
+      "group": "\u0417\u0430\u0433\u043e\u0442\u043e\u0432\u043a\u0430",
+      "min": 32,
+      "max": 240,
+      "step": 0.1,
+      "note": "\u041d\u0430\u0440\u0443\u0436\u043d\u044b\u0439 \u0434\u0438\u0430\u043c\u0435\u0442\u0440 \u0437\u0430\u0433\u043e\u0442\u043e\u0432\u043a\u0438 \u0434\u043e \u0442\u043e\u0447\u0435\u043d\u0438\u044f"
+    },
+    {
+      "key": "stockBore",
+      "label": "\u0418\u0441\u0445\u043e\u0434\u043d\u043e\u0435 \u043e\u0442\u0432\u0435\u0440\u0441\u0442\u0438\u0435 \u0437\u0430\u0433\u043e\u0442\u043e\u0432\u043a\u0438",
+      "unit": "\u043c\u043c",
+      "group": "\u0417\u0430\u0433\u043e\u0442\u043e\u0432\u043a\u0430",
+      "min": 16,
+      "max": 155,
+      "step": 0.1,
+      "note": "\u0414\u0438\u0430\u043c\u0435\u0442\u0440 \u0441\u043a\u0432\u043e\u0437\u043d\u043e\u0433\u043e \u043e\u0442\u0432\u0435\u0440\u0441\u0442\u0438\u044f \u0434\u043e \u0440\u0430\u0441\u0442\u0430\u0447\u0438\u0432\u0430\u043d\u0438\u044f"
+    },
+    {
+      "key": "blankLength",
+      "label": "Длина заготовки",
+      "unit": "мм",
+      "group": "Заготовка",
+      "min": 1,
+      "max": 1000,
+      "step": 0.1,
+      "note": "Полная длина исходной заготовки, включая передний припуск и участок в зажиме."
+    },
+    {
+      "key": "blankOverhang",
+      "label": "Вылет заготовки",
+      "unit": "мм",
+      "group": "Заготовка",
+      "min": 1,
+      "max": 1000,
+      "step": 0.1,
+      "note": "От передней плоскости кулачков до исходного переднего торца, включая припуск на его подготовку."
+    },
+    {
+      "key": "trimAllowance",
+      "label": "\u041f\u0440\u0438\u043f\u0443\u0441\u043a \u0437\u0430\u0434\u043d\u0435\u0433\u043e \u0442\u043e\u0440\u0446\u0430",
+      "unit": "\u043c\u043c",
+      "group": "\u0417\u0430\u0433\u043e\u0442\u043e\u0432\u043a\u0430",
+      "min": 0.5,
+      "max": 5,
+      "step": 0.1,
+      "note": "\u041f\u0440\u0438\u043f\u0443\u0441\u043a, \u0441\u043d\u0438\u043c\u0430\u0435\u043c\u044b\u0439 \u0441 \u0437\u0430\u0434\u043d\u0435\u0433\u043e \u0442\u043e\u0440\u0446\u0430 \u0432 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438 020"
+    },
+    {
+      "key": "cutoffWidth",
+      "label": "\u0428\u0438\u0440\u0438\u043d\u0430 \u043e\u0442\u0440\u0435\u0437\u043d\u043e\u0433\u043e \u0440\u0435\u0437\u0430",
+      "unit": "\u043c\u043c",
+      "group": "\u0417\u0430\u0433\u043e\u0442\u043e\u0432\u043a\u0430",
+      "min": 0.5,
+      "max": 10,
+      "step": 0.1,
+      "note": "\u0428\u0438\u0440\u0438\u043d\u0430 \u0440\u0435\u0437\u0430 \u043c\u0435\u0436\u0434\u0443 \u0434\u0435\u0442\u0430\u043b\u044c\u044e \u0441 \u0437\u0430\u0434\u043d\u0438\u043c \u043f\u0440\u0438\u043f\u0443\u0441\u043a\u043e\u043c \u0438 \u043e\u0441\u0442\u0430\u0442\u043a\u043e\u043c \u043f\u043e\u0434 \u0437\u0430\u0436\u0438\u043c. \u041f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0451\u0442\u0441\u044f \u0434\u043b\u0438\u043d\u043e\u0439 \u0434\u0435\u0442\u0430\u043b\u0438 \u0438 \u0437\u0430\u0434\u043d\u0438\u043c \u043f\u0440\u0438\u043f\u0443\u0441\u043a\u043e\u043c."
+    },
+    {
+      "key": "gripLength",
+      "label": "\u0414\u043b\u0438\u043d\u0430 \u0437\u0430\u0436\u0438\u043c\u0430",
+      "unit": "\u043c\u043c",
+      "group": "\u0417\u0430\u0433\u043e\u0442\u043e\u0432\u043a\u0430",
+      "min": 25,
+      "max": 80,
+      "step": 1,
+      "note": "\u0424\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u0434\u043b\u0438\u043d\u0430 \u0437\u0430\u0433\u043e\u0442\u043e\u0432\u043a\u0438, \u043e\u0445\u0432\u0430\u0447\u0435\u043d\u043d\u0430\u044f \u043a\u0443\u043b\u0430\u0447\u043a\u0430\u043c\u0438"
+    },
+    {
+      "key": "chuckClearance",
+      "label": "\u0417\u0430\u0437\u043e\u0440 \u0434\u043e \u043a\u0443\u043b\u0430\u0447\u043a\u043e\u0432",
+      "unit": "\u043c\u043c",
+      "group": "\u0417\u0430\u0433\u043e\u0442\u043e\u0432\u043a\u0430",
+      "min": 10,
+      "max": 40,
+      "step": 0.1,
+      "note": "\u041e\u0442 \u0437\u0430\u0434\u043d\u0435\u0439 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u043e\u0442\u0440\u0435\u0437\u043d\u043e\u0433\u043e \u0440\u0435\u0437\u0430 \u0434\u043e \u043a\u0443\u043b\u0430\u0447\u043a\u043e\u0432: \u0433\u0430\u0431\u0430\u0440\u0438\u0442 \u043f\u0440\u043e\u0435\u043a\u0442\u043d\u043e\u0433\u043e \u0431\u043b\u043e\u043a\u0430 6 \u043c\u043c \u0438 \u043e\u0441\u0442\u0430\u0442\u043e\u0447\u043d\u044b\u0439 \u0437\u0430\u043f\u0430\u0441 \u043d\u0435 \u043c\u0435\u043d\u0435\u0435 4 \u043c\u043c"
+    },
+    {
+      "key": "frontFacingAllowance",
+      "label": "\u041f\u0440\u0438\u043f\u0443\u0441\u043a \u043f\u0435\u0440\u0435\u0434\u043d\u0435\u0433\u043e \u0442\u043e\u0440\u0446\u0430",
+      "unit": "\u043c\u043c",
+      "group": "\u0417\u0430\u0433\u043e\u0442\u043e\u0432\u043a\u0430",
+      "min": 0.5,
+      "max": 5,
+      "step": 0.1,
+      "note": "\u041e\u0441\u0435\u0432\u043e\u0439 \u043f\u0440\u0438\u043f\u0443\u0441\u043a, \u0441\u043d\u0438\u043c\u0430\u0435\u043c\u044b\u0439 \u0432 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438 005 \u0434\u043e \u0437\u0430\u0434\u0430\u043d\u0438\u044f Z0"
+    },
+    {
+      "key": "depthOutside",
+      "label": "\u0413\u043b\u0443\u0431\u0438\u043d\u0430 \u043d\u0430\u0440\u0443\u0436\u043d\u043e\u0433\u043e \u043f\u0440\u043e\u0445\u043e\u0434\u0430 ap",
+      "unit": "\u043c\u043c",
+      "group": "\u0420\u0435\u0436\u0438\u043c\u044b",
+      "min": 0.1,
+      "max": 5,
+      "step": 0.1,
+      "note": "\u041c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u0430\u044f \u0440\u0430\u0434\u0438\u0430\u043b\u044c\u043d\u0430\u044f \u0433\u043b\u0443\u0431\u0438\u043d\u0430 \u043e\u0434\u043d\u043e\u0433\u043e \u043d\u0430\u0440\u0443\u0436\u043d\u043e\u0433\u043e \u043f\u0440\u043e\u0445\u043e\u0434\u0430"
+    },
+    {
+      "key": "depthInside",
+      "label": "\u0413\u043b\u0443\u0431\u0438\u043d\u0430 \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0433\u043e \u043f\u0440\u043e\u0445\u043e\u0434\u0430 ap",
+      "unit": "\u043c\u043c",
+      "group": "\u0420\u0435\u0436\u0438\u043c\u044b",
+      "min": 0.1,
+      "max": 3,
+      "step": 0.1,
+      "note": "\u041c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u0430\u044f \u0440\u0430\u0434\u0438\u0430\u043b\u044c\u043d\u0430\u044f \u0433\u043b\u0443\u0431\u0438\u043d\u0430 \u043e\u0434\u043d\u043e\u0433\u043e \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0433\u043e \u043f\u0440\u043e\u0445\u043e\u0434\u0430"
+    },
+    {
+      "key": "finishAllowance",
+      "label": "\u0427\u0438\u0441\u0442\u043e\u0432\u043e\u0439 \u043f\u0440\u0438\u043f\u0443\u0441\u043a a",
+      "unit": "\u043c\u043c",
+      "group": "\u0420\u0435\u0436\u0438\u043c\u044b",
+      "min": 0.05,
+      "max": 0.5,
+      "step": 0.05,
+      "note": "\u0420\u0430\u0434\u0438\u0430\u043b\u044c\u043d\u044b\u0439 \u043f\u0440\u0438\u043f\u0443\u0441\u043a, \u043e\u0441\u0442\u0430\u0432\u043b\u044f\u0435\u043c\u044b\u0439 \u043f\u0435\u0440\u0435\u0434 \u0447\u0438\u0441\u0442\u043e\u0432\u044b\u043c \u043f\u0440\u043e\u0445\u043e\u0434\u043e\u043c"
+    },
+    {
+      "key": "cuttingSpeed",
+      "label": "\u0417\u0430\u0434\u0430\u043d\u043d\u0430\u044f \u0441\u043a\u043e\u0440\u043e\u0441\u0442\u044c v",
+      "unit": "\u043c/\u043c\u0438\u043d",
+      "group": "\u0420\u0435\u0436\u0438\u043c\u044b",
+      "min": 10,
+      "max": 150,
+      "step": 1,
+      "note": "\u0421\u043a\u043e\u0440\u043e\u0441\u0442\u044c \u0434\u043b\u044f \u0440\u0430\u0441\u0447\u0451\u0442\u0430 \u043e\u0431\u043e\u0440\u043e\u0442\u043e\u0432 \u043f\u043e \u043e\u043f\u043e\u0440\u043d\u043e\u043c\u0443 \u0434\u0438\u0430\u043c\u0435\u0442\u0440\u0443"
+    },
+    {
+      "key": "feedRough",
+      "label": "\u0427\u0435\u0440\u043d\u043e\u0432\u0430\u044f \u043f\u043e\u0434\u0430\u0447\u0430 f",
+      "unit": "\u043c\u043c/\u043e\u0431",
+      "group": "\u0420\u0435\u0436\u0438\u043c\u044b",
+      "min": 0.03,
+      "max": 0.5,
+      "step": 0.01,
+      "note": "\u041f\u0435\u0440\u0435\u043c\u0435\u0449\u0435\u043d\u0438\u0435 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u0430 \u0437\u0430 \u043e\u0431\u043e\u0440\u043e\u0442 \u043f\u0440\u0438 \u0447\u0435\u0440\u043d\u043e\u0432\u043e\u0439 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0435"
+    },
+    {
+      "key": "feedFinish",
+      "label": "\u0427\u0438\u0441\u0442\u043e\u0432\u0430\u044f \u043f\u043e\u0434\u0430\u0447\u0430 f",
+      "unit": "\u043c\u043c/\u043e\u0431",
+      "group": "\u0420\u0435\u0436\u0438\u043c\u044b",
+      "min": 0.02,
+      "max": 0.3,
+      "step": 0.01,
+      "note": "\u041f\u0435\u0440\u0435\u043c\u0435\u0449\u0435\u043d\u0438\u0435 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u0430 \u0437\u0430 \u043e\u0431\u043e\u0440\u043e\u0442 \u043f\u0440\u0438 \u0447\u0438\u0441\u0442\u043e\u0432\u043e\u0439 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0435"
+    },
+    {
+      "key": "rpmMax",
+      "label": "\u041e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u0435 \u0447\u0430\u0441\u0442\u043e\u0442\u044b n",
+      "unit": "\u043e\u0431/\u043c\u0438\u043d",
+      "group": "\u0420\u0435\u0436\u0438\u043c\u044b",
+      "min": 100,
+      "max": 3000,
+      "step": 1,
+      "note": "\u0412\u0435\u0440\u0445\u043d\u044f\u044f \u0433\u0440\u0430\u043d\u0438\u0446\u0430 \u0447\u0430\u0441\u0442\u043e\u0442\u044b \u0432\u0440\u0430\u0449\u0435\u043d\u0438\u044f \u0448\u043f\u0438\u043d\u0434\u0435\u043b\u044f"
+    },
+    {
+      "key": "clearanceX",
+      "label": "\u0420\u0430\u0434\u0438\u0430\u043b\u044c\u043d\u044b\u0439 \u043e\u0442\u0432\u043e\u0434",
+      "unit": "\u043c\u043c",
+      "group": "\u041f\u043e\u0434\u0445\u043e\u0434\u044b",
+      "min": 0.5,
+      "max": 5,
+      "step": 0.1,
+      "note": "\u0420\u0430\u0434\u0438\u0430\u043b\u044c\u043d\u044b\u0439 \u043e\u0442\u0432\u043e\u0434; \u0432 \u043a\u043e\u043e\u0440\u0434\u0438\u043d\u0430\u0442\u0435 X \u0443\u0447\u0438\u0442\u044b\u0432\u0430\u0435\u0442\u0441\u044f \u0443\u0434\u0432\u043e\u0435\u043d\u043d\u0430\u044f \u0432\u0435\u043b\u0438\u0447\u0438\u043d\u0430"
+    },
+    {
+      "key": "clearanceZ",
+      "label": "\u041e\u0442\u0432\u043e\u0434 \u043f\u0435\u0440\u0435\u0434 \u0442\u043e\u0440\u0446\u043e\u043c",
+      "unit": "\u043c\u043c",
+      "group": "\u041f\u043e\u0434\u0445\u043e\u0434\u044b",
+      "min": 1,
+      "max": 10,
+      "step": 0.1,
+      "note": "\u041f\u043e\u043b\u043e\u0436\u0438\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u043a\u043e\u043e\u0440\u0434\u0438\u043d\u0430\u0442\u0430 Z \u0438\u0441\u0445\u043e\u0434\u043d\u043e\u0439 \u0442\u043e\u0447\u043a\u0438 \u043f\u0435\u0440\u0435\u0434 \u0442\u043e\u0440\u0446\u043e\u043c"
+    },
+    {
+      "key": "boreLowerDeviation",
+      "label": "d: \u043d\u0438\u0436\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u043e\u0442 \u043d\u043e\u043c\u0438\u043d\u0430\u043b\u0430 d \u0434\u043e \u043d\u0438\u0436\u043d\u0435\u0439 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u043e\u0442\u0432\u0435\u0440\u0441\u0442\u0438\u044f"
+    },
+    {
+      "key": "boreUpperDeviation",
+      "label": "d: \u0432\u0435\u0440\u0445\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u043e\u0442 \u043d\u043e\u043c\u0438\u043d\u0430\u043b\u0430 d \u0434\u043e \u0432\u0435\u0440\u0445\u043d\u0435\u0439 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u043e\u0442\u0432\u0435\u0440\u0441\u0442\u0438\u044f"
+    },
+    {
+      "key": "counterboreLowerDeviation",
+      "label": "d2: \u043d\u0438\u0436\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u043e\u0442 \u043d\u043e\u043c\u0438\u043d\u0430\u043b\u0430 d2 \u0434\u043e \u043d\u0438\u0436\u043d\u0435\u0439 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u0441\u0442\u0443\u043f\u0435\u043d\u0438"
+    },
+    {
+      "key": "counterboreUpperDeviation",
+      "label": "d2: \u0432\u0435\u0440\u0445\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u043e\u0442 \u043d\u043e\u043c\u0438\u043d\u0430\u043b\u0430 d2 \u0434\u043e \u0432\u0435\u0440\u0445\u043d\u0435\u0439 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u0441\u0442\u0443\u043f\u0435\u043d\u0438"
+    },
+    {
+      "key": "flangeLowerDeviation",
+      "label": "D: \u043d\u0438\u0436\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u043e\u0442 \u043d\u043e\u043c\u0438\u043d\u0430\u043b\u0430 D \u0434\u043e \u043d\u0438\u0436\u043d\u0435\u0439 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u0431\u0443\u0440\u0442\u0438\u043a\u0430"
+    },
+    {
+      "key": "flangeUpperDeviation",
+      "label": "D: \u0432\u0435\u0440\u0445\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u043e\u0442 \u043d\u043e\u043c\u0438\u043d\u0430\u043b\u0430 D \u0434\u043e \u0432\u0435\u0440\u0445\u043d\u0435\u0439 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u0431\u0443\u0440\u0442\u0438\u043a\u0430"
+    },
+    {
+      "key": "lengthLowerDeviation",
+      "label": "L: \u043d\u0438\u0436\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u043e\u0442 \u043d\u043e\u043c\u0438\u043d\u0430\u043b\u0430 L \u0434\u043e \u043d\u0438\u0436\u043d\u0435\u0439 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u043a\u043e\u043d\u0435\u0447\u043d\u043e\u0439 \u0434\u043b\u0438\u043d\u044b"
+    },
+    {
+      "key": "lengthUpperDeviation",
+      "label": "L: \u0432\u0435\u0440\u0445\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u043e\u0442 \u043d\u043e\u043c\u0438\u043d\u0430\u043b\u0430 L \u0434\u043e \u0432\u0435\u0440\u0445\u043d\u0435\u0439 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u043a\u043e\u043d\u0435\u0447\u043d\u043e\u0439 \u0434\u043b\u0438\u043d\u044b"
+    },
+    {
+      "key": "counterboreDepthLowerDeviation",
+      "label": "h: \u043d\u0438\u0436\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u043e\u0442 \u043d\u043e\u043c\u0438\u043d\u0430\u043b\u0430 h \u0434\u043e \u043d\u0438\u0436\u043d\u0435\u0439 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u0433\u043b\u0443\u0431\u0438\u043d\u044b \u0441\u0442\u0443\u043f\u0435\u043d\u0438"
+    },
+    {
+      "key": "bodyLowerDeviation",
+      "label": "Db: \u043d\u0438\u0436\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041d\u0438\u0436\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u0434\u0438\u0430\u043c\u0435\u0442\u0440\u0430 \u0442\u0435\u043b\u0430"
+    },
+    {
+      "key": "bodyUpperDeviation",
+      "label": "Db: \u0432\u0435\u0440\u0445\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u0412\u0435\u0440\u0445\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u0434\u0438\u0430\u043c\u0435\u0442\u0440\u0430 \u0442\u0435\u043b\u0430"
+    },
+    {
+      "key": "flangeWidthLowerDeviation",
+      "label": "b: \u043d\u0438\u0436\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041d\u0438\u0436\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u0448\u0438\u0440\u0438\u043d\u044b \u0431\u0443\u0440\u0442\u0430"
+    },
+    {
+      "key": "flangeWidthUpperDeviation",
+      "label": "b: \u0432\u0435\u0440\u0445\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u0412\u0435\u0440\u0445\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u0448\u0438\u0440\u0438\u043d\u044b \u0431\u0443\u0440\u0442\u0430"
+    },
+    {
+      "key": "counterboreDepthUpperDeviation",
+      "label": "h: \u0432\u0435\u0440\u0445\u043d\u0435\u0435 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0414\u043e\u043f\u0443\u0441\u043a\u0438",
+      "min": -5,
+      "max": 5,
+      "step": 0.01,
+      "note": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0435 \u043e\u0442 \u043d\u043e\u043c\u0438\u043d\u0430\u043b\u0430 h \u0434\u043e \u0432\u0435\u0440\u0445\u043d\u0435\u0439 \u0433\u0440\u0430\u043d\u0438\u0446\u044b \u0433\u043b\u0443\u0431\u0438\u043d\u044b \u0441\u0442\u0443\u043f\u0435\u043d\u0438"
+    },
+    {
+      "key": "boringOverhang",
+      "label": "\u0412\u044b\u043b\u0435\u0442 \u043e\u043f\u0440\u0430\u0432\u043a\u0438",
+      "unit": "\u043c\u043c",
+      "group": "\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442",
+      "min": 0.1,
+      "max": 1000,
+      "step": 0.1,
+      "note": ""
+    },
+    {
+      "key": "boringClamp",
+      "label": "\u0414\u043b\u0438\u043d\u0430 \u0437\u0430\u0436\u0438\u043c\u0430 \u043e\u043f\u0440\u0430\u0432\u043a\u0438",
+      "unit": "\u043c\u043c",
+      "group": "\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442",
+      "min": 0.1,
+      "max": 1000,
+      "step": 0.1,
+      "note": ""
+    },
+    {
+      "key": "customBoringDiameter",
+      "label": "\u0414\u0438\u0430\u043c\u0435\u0442\u0440 \u043e\u043f\u0440\u0430\u0432\u043a\u0438",
+      "unit": "\u043c\u043c",
+      "group": "\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442",
+      "min": 0.1,
+      "max": 1000,
+      "step": 0.1,
+      "note": ""
+    },
+    {
+      "key": "customBoringMinBore",
+      "label": "\u041c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u043e\u0435 \u043e\u0442\u0432\u0435\u0440\u0441\u0442\u0438\u0435",
+      "unit": "\u043c\u043c",
+      "group": "\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442",
+      "min": 0.1,
+      "max": 1000,
+      "step": 0.1,
+      "note": ""
+    },
+    {
+      "key": "customBoringOffset",
+      "label": "\u0412\u0435\u0440\u0448\u0438\u043d\u0430 \u043e\u0442 \u043e\u0441\u0438",
+      "unit": "\u043c\u043c",
+      "group": "\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442",
+      "min": 0.1,
+      "max": 1000,
+      "step": 0.1,
+      "note": ""
+    },
+    {
+      "key": "customBoringLength",
+      "label": "\u0414\u043b\u0438\u043d\u0430 \u043e\u043f\u0440\u0430\u0432\u043a\u0438",
+      "unit": "\u043c\u043c",
+      "group": "\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442",
+      "min": 0.1,
+      "max": 1000,
+      "step": 0.1,
+      "note": ""
+    },
+    {
+      "key": "customBoringMaxOverhang",
+      "label": "\u041f\u0440\u0435\u0434\u0435\u043b\u044c\u043d\u044b\u0439 \u0432\u044b\u043b\u0435\u0442",
+      "unit": "\u043c\u043c",
+      "group": "\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442",
+      "min": 0.1,
+      "max": 1000,
+      "step": 0.1,
+      "note": ""
+    }
+  ],
+  "dimensions": [
+    {
+      "key": "length",
+      "nominal": "length",
+      "lower": "lengthLowerDeviation",
+      "upper": "lengthUpperDeviation",
+      "designation": "lengthTolerance",
+      "positions": [
+        "IT"
+      ]
+    },
+    {
+      "key": "flangeDiameter",
+      "nominal": "flangeDiameter",
+      "lower": "flangeLowerDeviation",
+      "upper": "flangeUpperDeviation",
+      "designation": "flangeTolerance",
+      "positions": [
+        "h",
+        "js"
+      ]
+    },
+    {
+      "key": "boreDiameter",
+      "nominal": "boreDiameter",
+      "lower": "boreLowerDeviation",
+      "upper": "boreUpperDeviation",
+      "designation": "boreTolerance",
+      "positions": [
+        "H",
+        "JS"
+      ]
+    },
+    {
+      "key": "counterboreDiameter",
+      "nominal": "counterboreDiameter",
+      "lower": "counterboreLowerDeviation",
+      "upper": "counterboreUpperDeviation",
+      "designation": "counterboreTolerance",
+      "positions": [
+        "H",
+        "JS"
+      ]
+    },
+    {
+      "key": "counterboreDepth",
+      "nominal": "counterboreDepth",
+      "lower": "counterboreDepthLowerDeviation",
+      "upper": "counterboreDepthUpperDeviation",
+      "designation": "counterboreDepthTolerance",
+      "positions": [
+        "IT"
+      ]
+    },
+    {
+      "key": "bodyDiameter",
+      "nominal": "bodyDiameter",
+      "lower": "bodyLowerDeviation",
+      "upper": "bodyUpperDeviation",
+      "designation": "bodyTolerance",
+      "positions": [
+        "h",
+        "js"
+      ]
+    },
+    {
+      "key": "flangeWidth",
+      "nominal": "flangeWidth",
+      "lower": "flangeWidthLowerDeviation",
+      "upper": "flangeWidthUpperDeviation",
+      "designation": "flangeWidthTolerance",
+      "positions": [
+        "IT"
+      ]
+    }
+  ],
+  "cardFields": [
+    {
+      "key": "organization",
+      "label": "\u041e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u044f",
+      "maximum": 45
+    },
+    {
+      "key": "drawingNumber",
+      "label": "\u041e\u0431\u043e\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u0447\u0435\u0440\u0442\u0435\u0436\u0430",
+      "maximum": 40
+    },
+    {
+      "key": "developer",
+      "label": "\u0420\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u0430\u043b",
+      "maximum": 24
+    },
+    {
+      "key": "checker",
+      "label": "\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u043b",
+      "maximum": 24
+    },
+    {
+      "key": "rateSetter",
+      "label": "\u041d\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043b",
+      "maximum": 24
+    },
+    {
+      "key": "normController",
+      "label": "\u041d\u043e\u0440\u043c\u043e\u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c",
+      "maximum": 24
+    }
+  ]
+}

@@ -1,23 +1,20 @@
-﻿param([switch]$SkipTests)
+﻿param([ValidateSet('Debug', 'Release')][string]$Configuration = 'Release', [switch]$NoDeploy)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
-Set-Location -LiteralPath $projectRoot
-$env:DOTNET_CLI_HOME = Join-Path $projectRoot '.dotnet'
-$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-$env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
-$env:DOTNET_ADD_GLOBAL_TOOLS_TO_PATH = 'false'
-$env:DOTNET_NOLOGO = '1'
-$desktopProject = Join-Path $projectRoot 'src\Kontur.Desktop\Kontur.Desktop.csproj'
-$buildProperties = [xml](Get-Content -LiteralPath (Join-Path $projectRoot 'Directory.Build.props') -Raw)
-$releasePath = Join-Path $projectRoot ('release\ParamForge-' + $buildProperties.Project.PropertyGroup.Version)
-& dotnet build $desktopProject -c Release --ignore-failed-sources -p:NuGetAudit=false
-if ($LASTEXITCODE -ne 0) { throw 'Не удалось собрать приложение.' }
-if (-not $SkipTests) {
-    & dotnet run --project src/Kontur.Tests -c Release -- --report qa/csharp-test-results.json | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Проверки завершились с ошибкой.' }
-    $testReport = Get-Content -LiteralPath qa/csharp-test-results.json -Raw | ConvertFrom-Json
-    Write-Output ("Tests: {0}/{1}" -f $testReport.passedTests,$testReport.totalTests)
+. (Join-Path $PSScriptRoot 'native-tools.ps1')
+$tools = Initialize-ParamForgeNativeTools -Preset ('windows-' + $Configuration.ToLowerInvariant())
+Invoke-ParamForgeBuild $tools $projectRoot
+if (-not $NoDeploy -and $Configuration -eq 'Release') {
+    $stage = Join-Path $tools.Work ('staging\app-' + [Guid]::NewGuid().ToString('N'))
+    Copy-ParamForgeApplication $tools $projectRoot $stage
+    $application = Join-Path $projectRoot 'app'
+    $expected = [IO.Path]::GetFullPath((Join-Path $projectRoot 'app'))
+    if ([IO.Path]::GetFullPath($application) -ne $expected) { throw 'Unexpected application directory.' }
+    if (Test-Path -LiteralPath $application) {
+        $archive = Join-Path $tools.Work ('archive\previous-app-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Path (Split-Path -Parent $archive) -Force | Out-Null
+        Move-Item -LiteralPath $application -Destination $archive
+    }
+    Move-Item -LiteralPath $stage -Destination $application
+    Write-Output (Join-Path $application 'ParamForge.exe')
 }
-& dotnet publish $desktopProject -c Release --no-restore --no-self-contained -o $releasePath
-if ($LASTEXITCODE -ne 0) { throw 'Не удалось подготовить локальный комплект.' }
-Write-Output (Join-Path $releasePath 'ParamForge.exe')

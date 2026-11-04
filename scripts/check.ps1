@@ -1,29 +1,33 @@
 ﻿param([switch]$Ui)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
-Set-Location -LiteralPath $projectRoot
-
-& dotnet build Kontur.sln -c Release --ignore-failed-sources -p:NuGetAudit=false
-if ($LASTEXITCODE -ne 0) { throw 'Сборка завершилась с ошибкой.' }
-
-& dotnet format whitespace Kontur.sln --no-restore --verify-no-changes --verbosity quiet
-if ($LASTEXITCODE -ne 0) { throw 'Форматирование отличается от .editorconfig. Выполните dotnet format whitespace Kontur.sln --no-restore.' }
-
-& dotnet format style Kontur.sln --no-restore --verify-no-changes --diagnostics IDE0011 IDE0005 IDE0040 --severity info --verbosity quiet
-if ($LASTEXITCODE -ne 0) { throw 'Проверьте скобки, модификаторы доступа и неиспользуемые using.' }
-
-& dotnet run --project src/Kontur.Tests -c Release --no-build -- --report qa/csharp-test-results.json | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'Проверки ядра завершились с ошибкой.' }
-$coreReport = Get-Content -LiteralPath qa/csharp-test-results.json -Raw | ConvertFrom-Json
-Write-Output ('Core: {0}/{1}' -f $coreReport.passedTests, $coreReport.totalTests)
-
-if ($Ui) {
-    $runName = 'ui-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
-    $outputDirectory = Join-Path $projectRoot ('qa\' + $runName)
-    & dotnet run --project src/Kontur.Desktop.Tests -c Release --no-build -- --smoke-output $outputDirectory
-    if ($LASTEXITCODE -ne 0) { throw ('Проверки интерфейса завершились с ошибкой: ' + $outputDirectory) }
-    $uiReport = Get-Content -LiteralPath (Join-Path $outputDirectory 'ui-smoke.json') -Raw | ConvertFrom-Json
-    Write-Output ('UI: {0}/{1}' -f ($uiReport.checks | Where-Object passed).Count, $uiReport.checks.Count)
-    Write-Output $outputDirectory
-    & (Join-Path $PSScriptRoot 'test-startup.ps1') -Executable (Join-Path $projectRoot 'src\Kontur.Desktop\bin\Release\net10.0-windows\ParamForge.exe')
+. (Join-Path $PSScriptRoot 'native-tools.ps1')
+$tools = Initialize-ParamForgeNativeTools -Preset 'windows-checks'
+Invoke-ParamForgeBuild $tools $projectRoot
+$run = Join-Path $tools.Work ('qa\checks-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+New-Item -ItemType Directory -Path $run -Force | Out-Null
+$savedQa = $env:PARAMFORGE_QA_DIR
+$savedScale = $env:QT_SCALE_FACTOR
+$savedOracle = $env:PARAMFORGE_REFERENCE_FILE
+try {
+    $env:PARAMFORGE_QA_DIR = $run
+    $coreReport = (Join-Path $run 'core.txt') + ',txt'
+    & (Join-Path $tools.Build 'bin\ParamForge.Tests.exe') -o $coreReport -o '-,txt'
+    if ($LASTEXITCODE -ne 0) { throw ('Core checks failed: ' + $run) }
+    if ($Ui) {
+        foreach ($scale in @('1', '1.25', '1.5', '2')) {
+            $env:QT_SCALE_FACTOR = $scale
+            $env:PARAMFORGE_QA_DIR = Join-Path $run ('ui-' + $scale)
+            New-Item -ItemType Directory -Path $env:PARAMFORGE_QA_DIR -Force | Out-Null
+            $uiReport = (Join-Path $env:PARAMFORGE_QA_DIR 'tests.txt') + ',txt'
+            & (Join-Path $tools.Build 'bin\ParamForge.UiTests.exe') -o $uiReport -o '-,txt'
+            if ($LASTEXITCODE -ne 0) { throw ('UI checks failed at scale ' + $scale + ': ' + $run) }
+        }
+    }
 }
+finally {
+    $env:PARAMFORGE_QA_DIR = $savedQa
+    $env:QT_SCALE_FACTOR = $savedScale
+    $env:PARAMFORGE_REFERENCE_FILE = $savedOracle
+}
+Write-Output ('Checks: ' + $run)

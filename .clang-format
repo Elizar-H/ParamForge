@@ -1,0 +1,13 @@
+BasedOnStyle: Microsoft
+IndentWidth: 4
+ColumnLimit: 120
+BreakBeforeBraces: Allman
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+NamespaceIndentation: None
+SortIncludes: CaseSensitive
+PointerAlignment: Left
+ReferenceAlignment: Left
