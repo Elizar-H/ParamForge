@@ -1,4 +1,7 @@
 #include "inspection_view.h"
+#include "core/engine.h"
+#include "drawing.h"
+#include "theme.h"
 #include "controls.h"
 #include <QHeaderView>
 #include <QItemSelectionModel>
@@ -71,7 +74,7 @@ QVariant TransitionModel::data(const QModelIndex& index, int role) const
 TrajectoryCanvas::TrajectoryCanvas(QWidget* parent) : QWidget(parent)
 {
     setObjectName("trajectoryCanvas");
-    setMinimumSize(280, 220);
+    setMinimumSize(280, 180);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
     setCursor(Qt::OpenHandCursor);

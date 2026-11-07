@@ -1,4 +1,5 @@
 #include "part_3d.h"
+#include "theme.h"
 #include "controls.h"
 #include "core/geometry.h"
 #include <QMatrix4x4>

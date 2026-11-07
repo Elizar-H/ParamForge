@@ -1,4 +1,6 @@
 #pragma once
+#include "parameter_row.h"
+#include "dimension_pane.h"
 #include "controls.h"
 #include "part_3d.h"
 #include <QMap>

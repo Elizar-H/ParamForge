@@ -1,4 +1,9 @@
 #include "part_view.h"
+#include <QLabel>
+#include "core/tolerances.h"
+#include "drawing.h"
+#include "theme.h"
+#include "numeric_edit.h"
 #include "core/geometry.h"
 #include <QApplication>
 #include <QButtonGroup>

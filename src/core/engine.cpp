@@ -1,4 +1,10 @@
-#include "model.h"
+#include "engine.h"
+#include "operations.h"
+#include "planning.h"
+#include "postprocessor.h"
+#include "tolerances.h"
+#include "tooling.h"
+#include "verifier.h"
 #include <QCryptographicHash>
 #include <QJsonDocument>
 #include <cmath>
@@ -65,6 +71,7 @@ static bool validText(const QJsonValue& value, int maximum, bool required)
 QVector<Error> validate(const Parameters& input)
 {
     QVector<Error> errors;
+    QVector<Error> independent;
     auto error = [&](const QString& key, const QString& message) { errors.append({key, message}); };
     for (const auto& key : {"bodyDiameter", "flangeWidth", "blankLength", "blankOverhang"})
     {
@@ -73,32 +80,33 @@ QVector<Error> validate(const Parameters& input)
         if (!std::isfinite(value) || value < f.minimum || value > f.maximum)
             error(key, f.label + ": размер вне диапазона.");
     }
-    if (!errors.isEmpty())
-        return errors;
     if (input.s("controller") != "axioma" && input.s("controller") != "sinumerik840dsl")
-        error("controller", "Неизвестный профиль ЧПУ.");
+        independent.append(Error{"controller", "Неизвестный профиль ЧПУ."});
+    if (!input.json().value("simulationBlank").isBool())
+        independent.append(
+            Error{"simulationBlank", "Настройка заготовки для моделирования должна быть включена или выключена."});
     auto p = input;
-    errors += validateToolSetup(p);
-    if (!errors.isEmpty())
-        return errors;
-    try
-    {
-        p = resolveStock(resolveTolerances(p));
-    }
-    catch (const std::exception& e)
-    {
-        error("tolerances", QString::fromUtf8(e.what()));
-    }
-    if (!errors.isEmpty())
-        return errors;
+    const auto toolErrors = validateToolSetup(p);
+    independent += toolErrors;
     for (const auto& item : {std::pair{"partName", 45}, std::pair{"material", 35}})
         if (!validText(p.json().value(item.first), item.second, true))
-            error(item.first, "Введите короткое наименование без переносов строки.");
+            independent.append(Error{item.first, "Введите короткое наименование без переносов строки."});
     for (const auto& item : schema()["cardFields"].toArray())
     {
         const auto f = item.toObject();
         if (!validText(p.json().value(f["key"].toString()), f["maximum"].toInt(), false))
-            error(f["key"].toString(), "Реквизит слишком длинный или содержит недопустимые символы.");
+            independent.append({f["key"].toString(), "Реквизит слишком длинный или содержит недопустимые символы."});
+    }
+    if (!errors.isEmpty())
+        return errors + independent;
+    try
+    {
+        p = toolErrors.isEmpty() ? resolveStock(resolveTolerances(p)) : resolveTolerances(p);
+    }
+    catch (const std::exception& e)
+    {
+        error("tolerances", QString::fromUtf8(e.what()));
+        return errors + independent;
     }
     for (const auto& f : fields())
     {
@@ -116,7 +124,7 @@ QVector<Error> validate(const Parameters& input)
         }
     }
     if (!errors.isEmpty())
-        return errors;
+        return errors + independent;
     for (const auto& d : dimensions())
     {
         const auto nominal = p.n(d.nominal), lo = p.n(d.lower), hi = p.n(d.upper);
@@ -129,7 +137,7 @@ QVector<Error> validate(const Parameters& input)
             error(d.upper, "В интервал допуска не попадает цель с точностью 0,001 мм.");
     }
     if (!errors.isEmpty())
-        return errors;
+        return errors + independent;
     if (p.n("flangeWidth") >= p.n("length"))
         error("flangeWidth", "Требуется b < L.");
     if (p.n("counterboreDepth") >= p.n("length"))
@@ -145,7 +153,7 @@ QVector<Error> validate(const Parameters& input)
     if (p.n("counterboreDepth") >= p.n("flangeWidth") && p.n("counterboreDiameter") >= p.n("bodyDiameter"))
         error("counterboreDiameter", "При h ≥ b требуется d2 < Db.");
     if (!errors.isEmpty())
-        return errors;
+        return errors + independent;
     const auto c = calculate(p);
     const auto flangeMin = p.n("flangeDiameter") + p.n("flangeLowerDeviation");
     const auto boreMax = p.n("boreDiameter") + p.n("boreUpperDeviation");
@@ -178,14 +186,17 @@ QVector<Error> validate(const Parameters& input)
         error("stockDiameter", "Недостаточно наружного припуска на обработку буртика.");
     if (c.targetBoreDiameter - p.n("stockBore") < minRemoval - 1e-8)
     {
-        const auto selectedTool = boringTool(p);
-        const auto requiredBore = selectedTool.minBore + 2 * p.n("clearanceX");
-        error("stockBore", requiredBore > c.targetBoreDiameter - minRemoval
-                               ? "Оправка " + selectedTool.name + " требует исходное отверстие от " +
-                                     localized(requiredBore) +
-                                     " мм с учётом отвода. Для этой детали нужно отверстие не больше " +
-                                     localized(c.targetBoreDiameter - minRemoval) + " мм. Выберите меньшую оправку."
-                               : "Недостаточно припуска на растачивание отверстия.");
+        QString message = "Недостаточно припуска на растачивание отверстия.";
+        if (toolErrors.isEmpty())
+        {
+            const auto selectedTool = boringTool(p);
+            const auto requiredBore = selectedTool.minBore + 2 * p.n("clearanceX");
+            if (requiredBore > c.targetBoreDiameter - minRemoval)
+                message = "Оправка " + selectedTool.name + " требует исходное отверстие от " + localized(requiredBore) +
+                          " мм с учётом отвода. Для этой детали нужно отверстие не больше " +
+                          localized(c.targetBoreDiameter - minRemoval) + " мм. Выберите меньшую оправку.";
+        }
+        error("stockBore", message);
     }
     if (c.targetFlangeDiameter - c.targetBodyDiameter < minRemoval - 1e-8)
         error("bodyDiameter", "Перепад наружных диаметров слишком мал.");
@@ -193,14 +204,17 @@ QVector<Error> validate(const Parameters& input)
         error("counterboreDiameter", "Перепад внутренних диаметров слишком мал.");
     if (p.n("finishAllowance") > std::min(p.n("depthOutside"), p.n("depthInside")))
         error("finishAllowance", "Чистовой припуск превышает глубину прохода.");
-    const auto tool = boringTool(p);
-    const auto boreMessage = "Для " + tool.name + " с радиальным отводом " + localized(p.n("clearanceX")) +
-                             " мм исходное отверстие должно быть не меньше " +
-                             localized(tool.minBore + 2 * p.n("clearanceX")) + " мм.";
-    if (p.n("stockBore") < tool.minBore)
-        error("stockBore", boreMessage);
-    if (c.clearIn < tool.minBore - 1e-8)
-        error("clearanceX", boreMessage);
+    if (toolErrors.isEmpty())
+    {
+        const auto tool = boringTool(p);
+        const auto boreMessage = "Для " + tool.name + " с радиальным отводом " + localized(p.n("clearanceX")) +
+                                 " мм исходное отверстие должно быть не меньше " +
+                                 localized(tool.minBore + 2 * p.n("clearanceX")) + " мм.";
+        if (p.n("stockBore") < tool.minBore)
+            error("stockBore", boreMessage);
+        if (c.clearIn < tool.minBore - 1e-8)
+            error("clearanceX", boreMessage);
+    }
     if (c.cutLength > p.n("boringOverhang") - 5 + 1e-8)
         error("length",
               "В этом маршруте отверстие растачивается целиком в установе 010; установ 020 обрабатывает задний торец. "
@@ -240,7 +254,7 @@ QVector<Error> validate(const Parameters& input)
                           count(c.targetCounterboreDiameter - c.targetBoreDiameter, p.n("depthInside")) + 4;
     if (countAll > 400)
         error("depthOutside", "Слишком много проходов: более 400.");
-    return errors;
+    return errors + independent;
 }
 Generation generate(const Parameters& input)
 {

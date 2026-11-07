@@ -6,6 +6,7 @@
 #include <QVector>
 #include <initializer_list>
 #include <optional>
+#include <utility>
 
 namespace pf
 {
@@ -112,6 +113,7 @@ enum class InstructionKind
     Stop,
     Tool,
     GeometryOffset,
+    ApproachFront,
     CoolantOn,
     Speed,
     FeedPerRevolution,
@@ -127,6 +129,7 @@ struct Instruction
     int tool = 0;
     double value = 0;
     QString text;
+    int corrector = 1;
 };
 struct Plan
 {
@@ -173,31 +176,4 @@ struct Generation
     }
 };
 
-double toleranceWidth(double nominal, int grade);
-std::pair<double, double> deviations(const Dimension&, double nominal, const QString& designation);
-Parameters resolveTolerances(Parameters parameters);
-Parameters setTolerance(Parameters parameters, const QString& key, const QString& designation);
-Parameters resolveStock(Parameters parameters);
-std::pair<double, double> boreLimits(const Parameters&);
-double minimumStockDiameter(const Parameters&);
-Calculations calculate(const Parameters&);
-struct BoringTool
-{
-    QString id, name;
-    double diameter, minBore, offset, length, minOverhang, maxOverhang;
-};
-const QVector<BoringTool>& boringTools();
-QString partingToolName(const Parameters&);
-BoringTool boringTool(const Parameters&);
-QVector<Error> validateToolSetup(const Parameters&);
-QVector<Error> validate(const Parameters&);
-QVector<double> passes(double start, double finish, double depth);
-Plan firstSetup(const Parameters&, const Calculations&, const QString& id);
-Plan secondSetup(const Parameters&, const Calculations&, const QString& id);
-Program postprocess(const Plan&, const Calculations&, const QString& controller);
-Verification verify(const QString& text, const Parameters&, const Setup&);
-Generation generate(const Parameters&);
-QVector<Operation> operations(const Parameters&, const Calculations&);
-QString inspectionDescription(const Parameters&, const Calculations&);
-QJsonObject projectJson(const Project&);
 } // namespace pf

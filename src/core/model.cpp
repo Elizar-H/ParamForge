@@ -1,4 +1,5 @@
 #include "model.h"
+#include "tolerances.h"
 #include <QFile>
 #include <QJsonDocument>
 #include <QLocale>
@@ -122,6 +123,16 @@ Parameters::Parameters(const QJsonObject& overrides) : Parameters()
 {
     for (auto i = overrides.begin(); i != overrides.end(); ++i)
         values.insert(i.key(), i.value());
+    if (!overrides.contains("bodyToolNumber"))
+        for (int i = 0; i < 99; ++i)
+        {
+            const int candidate = (i + 2) % 99 + 1;
+            if (candidate != n("outerToolNumber") && candidate != n("boringToolNumber"))
+            {
+                set("bodyToolNumber", candidate);
+                break;
+            }
+        }
     for (const auto& d : dimensions())
         if ((d.key == "bodyDiameter" || d.key == "flangeWidth") && s(d.designation) == "m")
         {

@@ -1,4 +1,8 @@
 #include "projects.h"
+#include "core/engine.h"
+#include "core/operations.h"
+#include "core/tolerances.h"
+#include "core/verifier.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -127,25 +131,15 @@ QStringList exportProject(const Project& project, const QString& folder)
     QLockFile lock(destination.filePath(".paramforge-export.lock"));
     if (!lock.tryLock(0))
         fail("В эту папку уже выполняется выпуск.");
-    // Existing unrelated files are welcome. On a filename collision, create the next
-    // complete set automatically, keeping original NC filenames and every earlier file.
     const auto parentFolder = destination;
-    bool collision = false;
-    for (const auto& output : outputs)
-        collision |= destination.exists(output.first);
-    bool createdFolder = false;
-    if (collision)
+    int index = 1;
+    QString name;
+    do
     {
-        int index = 2;
-        QString name;
-        do
-        {
-            name = "Комплект " + QString::number(index++);
-        } while (parentFolder.exists(name));
-        if (!destination.mkdir(name) || !destination.cd(name))
-            fail("Не удалось создать папку комплекта.");
-        createdFolder = true;
-    }
+        name = "Комплект " + QString::number(index++);
+    } while (parentFolder.exists(name));
+    if (!destination.mkdir(name) || !destination.cd(name))
+        fail("Не удалось создать папку комплекта.");
     QStringList created;
     try
     {
@@ -164,8 +158,7 @@ QStringList exportProject(const Project& project, const QString& folder)
     {
         for (const auto& path : created)
             QFile::remove(path);
-        if (createdFolder)
-            parentFolder.rmdir(destination.dirName());
+        parentFolder.rmdir(destination.dirName());
         throw;
     }
     return created;

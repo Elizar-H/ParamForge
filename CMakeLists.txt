@@ -40,6 +40,7 @@ FetchContent_Declare(miniz URL https://github.com/richgel999/miniz/archive/refs/
 FetchContent_MakeAvailable(json miniz)
 add_library(ParamForge.Core STATIC
     src/core/model.h src/core/geometry.h
+    src/core/engine.h src/core/tolerances.h src/core/tooling.h src/core/planning.h src/core/postprocessor.h src/core/verifier.h src/core/operations.h
     src/core/model.cpp src/core/tolerances.cpp src/core/engine.cpp src/core/tooling.cpp
     src/core/planning.cpp src/core/postprocessor.cpp src/core/verifier.cpp src/core/operations.cpp
     src/resources/resources.qrc)
@@ -57,7 +58,13 @@ if(PARAMFORGE_BUILD_DESKTOP)
         src/desktop/inspection_view.h src/desktop/part_3d.h src/desktop/controls.h
         src/desktop/window.cpp src/desktop/part_view.cpp
         src/desktop/process_view.cpp src/desktop/inspection_view.cpp
-        src/desktop/part_3d.cpp src/desktop/controls.cpp)
+        src/desktop/part_3d.cpp src/desktop/controls.cpp
+        src/desktop/theme.h src/desktop/theme.cpp
+        src/desktop/drawing.h src/desktop/drawing.cpp
+        src/desktop/numeric_edit.h src/desktop/numeric_edit.cpp
+        src/desktop/parameter_row.h src/desktop/parameter_row.cpp
+        src/desktop/dimension_pane.h src/desktop/dimension_pane.cpp
+        src/desktop/setup_drawing.h src/desktop/setup_drawing.cpp)
     target_link_libraries(ParamForge.Desktop PUBLIC ParamForge.Files Qt6::Widgets Qt6::OpenGLWidgets Qt6::Concurrent)
     add_executable(ParamForge WIN32 src/desktop/main.cpp)
     if(WIN32)

@@ -1,4 +1,6 @@
-#include "model.h"
+#include "verifier.h"
+#include "engine.h"
+#include "tooling.h"
 #include <QMap>
 #include <QRegularExpression>
 #include <QSet>
@@ -48,6 +50,12 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
             return finish();
         }
     const bool siemens = p.s("controller") == "sinumerik840dsl";
+    const auto configuredTool = [&](double t, double d)
+    {
+        return (t == p.n("outerToolNumber") && d == p.n("outerCorrector")) ||
+               (!setup.flipped && t == p.n("bodyToolNumber") && d == p.n("bodyCorrector")) ||
+               (!setup.flipped && t == p.n("boringToolNumber") && d == p.n("boringCorrector"));
+    };
     const double maxX = setup.flipped ? calculate(p).targetBodyDiameter + 2 * p.n("clearanceX")
                                       : p.n("stockDiameter") + 2 * p.n("clearanceX");
     const double minZ = setup.flipped ? 0 : -calculate(p).cutLength;
@@ -105,7 +113,7 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
                                                          QRegularExpression::CaseInsensitiveOption);
             const auto match = blankPattern.match(trimmed);
             const auto args = match.captured(1).split(',');
-            bool valid = siemens && !setup.flipped && !ended && !blankDefined && tool == 0 && result.moves.isEmpty() &&
+            bool valid = siemens && p.b("simulationBlank") && !setup.flipped && !ended && !blankDefined && tool == 0 && result.moves.isEmpty() &&
                          preparation.contains(54) && match.hasMatch() && args.size() == 10;
             if (valid)
             {
@@ -299,8 +307,8 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
         {
             if (spindle || !stopped || feedMode != 94 || coolant || !coolantOff)
                 fail(label + "Смена инструмента требует G94, M9 и M5.");
-            if ((words.value('T', 0) != 1 && words.value('T', 0) != 2) || words.value('D', 0) != 1)
-                fail(label + "Требуется T1/T2 и D1.");
+            if (!configuredTool(words.value('T', 0), words.value('D', 0)))
+                fail(label + "T/D не соответствуют инструментам в технологии.");
             tool = static_cast<int>(words.value('T', 0));
             corrector = static_cast<int>(words.value('D', 0));
             compensation = siemens;
@@ -312,8 +320,8 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
             compensation = false;
         if (gs.contains(43))
         {
-            if ((tool != 1 && tool != 2) || corrector != 1)
-                fail(label + "G43 требует выбранного инструмента и D1.");
+            if (!configuredTool(tool, corrector))
+                fail(label + "G43 требует выбранного инструмента с настроенным корректором.");
             compensation = true;
         }
         if (ms.contains(3))
@@ -329,22 +337,31 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
         {
             if (!preparation.contains(required) || !diameter)
                 fail(label + "Не заданы подготовительные команды и диаметральный режим.");
+            const QString mode = gs.contains(0) ? "G0" : "G1";
+            if (!configuredTool(tool, corrector) || !compensation)
+                fail(label + "До движения нужен инструмент с корректором.");
+            if (afterTool && !zState && mode == "G0" && gs.size() == 1 && ms.isEmpty() &&
+                words.size() == 2 && words.contains('Z') && !words.contains('X'))
+            {
+                if (std::abs(words['Z'] - maxZ) > .000501)
+                    fail(label + "После смены инструмента сначала требуется выход по Z перед торцом.");
+                // X is unknown after the offset change; this is not a resolved X/Z segment.
+                zState = words['Z'];
+                continue;
+            }
             if (!words.contains('X') || !words.contains('Z'))
             {
                 fail(label + "Каждое движение задаёт X и Z.");
                 continue;
             }
             const auto x = words['X'], z = words['Z'];
-            const QString mode = gs.contains(0) ? "G0" : "G1";
             if (x < -.000501 || x > maxX + .000501 || z < minZ - .000501 || z > maxZ + .000501)
                 fail(label + "Координаты выходят за границы установа.");
-            if ((tool != 1 && tool != 2) || !compensation)
-                fail(label + "До движения нужен инструмент с корректором.");
             if (result.moves.isEmpty() &&
                 (mode != "G0" || std::abs(x - maxX) > .000501 || std::abs(z - maxZ) > .000501))
                 fail(label + "Неверная первая расчётная точка.");
-            if (afterTool && mode != "G0")
-                fail(label + "После смены инструмента требуется G0.");
+            if (afterTool && (mode != "G0" || !zState || std::abs(z - maxZ) > .000501))
+                fail(label + "После смены инструмента сначала требуется отдельный G0 по Z перед торцом.");
             if (mode == "G1")
             {
                 if (!spindle || !coolant || feedMode != 95 || !rpm || !feed || *rpm <= 0 || *feed <= 0 ||
@@ -367,7 +384,7 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
     }
     if (!header && !siemens)
         fail("Нет заголовка программы.");
-    if (siemens && !setup.flipped && !blankDefined)
+    if (siemens && p.b("simulationBlank") && !setup.flipped && !blankDefined)
         fail("Нет определения полой заготовки WORKPIECE для 010.");
     if (result.moves.isEmpty())
         fail("Нет поддерживаемых перемещений.");

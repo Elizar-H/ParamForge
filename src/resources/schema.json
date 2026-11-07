@@ -1,5 +1,16 @@
 {
   "defaults": {
+    "simulationBlank": true,
+    "outerTool": "sclcr",
+    "customOuterName": "Свой резец",
+    "outerToolNumber": 1,
+    "outerCorrector": 1,
+    "bodyTool": "sclcl",
+    "customBodyName": "Свой обратный резец",
+    "bodyToolNumber": 3,
+    "bodyCorrector": 1,
+    "boringToolNumber": 2,
+    "boringCorrector": 1,
     "controller": "axioma",
     "lengthTolerance": "",
     "flangeTolerance": "",
@@ -69,6 +80,66 @@
     "cutoffWidth": 3
   },
   "fields": [
+    {
+      "key": "bodyToolNumber",
+      "label": "Номер инструмента T",
+      "unit": "",
+      "group": "Инструмент",
+      "min": 1,
+      "max": 99,
+      "step": 1,
+      "note": "Номер обратного наружного резца для точения тела к буртику (+Z)"
+    },
+    {
+      "key": "bodyCorrector",
+      "label": "Корректор D",
+      "unit": "",
+      "group": "Инструмент",
+      "min": 1,
+      "max": 99,
+      "step": 1,
+      "note": "Номер режущей кромки / корректора обратного наружного резца"
+    },
+    {
+      "key": "outerToolNumber",
+      "label": "\u041d\u043e\u043c\u0435\u0440 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u0430 T",
+      "unit": "",
+      "group": "\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442",
+      "min": 1,
+      "max": 99,
+      "step": 1,
+      "note": "\u041d\u043e\u043c\u0435\u0440 \u043d\u0430\u0440\u0443\u0436\u043d\u043e\u0433\u043e \u0440\u0435\u0437\u0446\u0430 \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0435 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u0432 \u0427\u041f\u0423"
+    },
+    {
+      "key": "outerCorrector",
+      "label": "\u041a\u043e\u0440\u0440\u0435\u043a\u0442\u043e\u0440 D",
+      "unit": "",
+      "group": "\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442",
+      "min": 1,
+      "max": 99,
+      "step": 1,
+      "note": "\u041d\u043e\u043c\u0435\u0440 \u0440\u0435\u0436\u0443\u0449\u0435\u0439 \u043a\u0440\u043e\u043c\u043a\u0438 / \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043e\u0440\u0430 \u043d\u0430\u0440\u0443\u0436\u043d\u043e\u0433\u043e \u0440\u0435\u0437\u0446\u0430"
+    },
+    {
+      "key": "boringToolNumber",
+      "label": "\u041d\u043e\u043c\u0435\u0440 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u0430 T",
+      "unit": "",
+      "group": "\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442",
+      "min": 1,
+      "max": 99,
+      "step": 1,
+      "note": "\u041d\u043e\u043c\u0435\u0440 \u0440\u0430\u0441\u0442\u043e\u0447\u043d\u043e\u0439 \u043e\u043f\u0440\u0430\u0432\u043a\u0438 \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0435 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u0432 \u0427\u041f\u0423"
+    },
+    {
+      "key": "boringCorrector",
+      "label": "\u041a\u043e\u0440\u0440\u0435\u043a\u0442\u043e\u0440 D",
+      "unit": "",
+      "group": "\u0418\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442",
+      "min": 1,
+      "max": 99,
+      "step": 1,
+      "note": "\u041d\u043e\u043c\u0435\u0440 \u0440\u0435\u0436\u0443\u0449\u0435\u0439 \u043a\u0440\u043e\u043c\u043a\u0438 / \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043e\u0440\u0430 \u0440\u0430\u0441\u0442\u043e\u0447\u043d\u043e\u0439 \u043e\u043f\u0440\u0430\u0432\u043a\u0438"
+    },
     {
       "key": "length",
       "label": "\u0414\u043b\u0438\u043d\u0430 L",

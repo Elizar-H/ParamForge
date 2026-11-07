@@ -1,5 +1,8 @@
 #pragma once
 #include "controls.h"
+#include "parameter_row.h"
+#include "setup_drawing.h"
+#include <QCheckBox>
 #include <QListWidget>
 #include <QMap>
 #include <QPainter>
@@ -8,24 +11,6 @@
 
 namespace pf::ui
 {
-struct SetupMapping
-{
-    double scale = 1;
-    double zDirection = 1, zOffset = 0;
-    QPointF origin;
-    QPointF axesOrigin;
-    QLineF parameterIndicator;
-    QRectF parameterLabel;
-    QVector<QLineF> extensionLines;
-    QPointF map(double z, double radius) const
-    {
-        return origin + QPointF((zOffset + zDirection * z) * scale, -radius * scale);
-    }
-};
-SetupMapping drawSetup(QPainter&, const QRectF&, const Parameters&, const Setup&, const QString& highlight = {},
-                       bool positiveOnly = false, std::optional<SetupMapping> viewport = {});
-SetupMapping fitSetup(const QRectF&, const Parameters&, const Setup&, bool positiveOnly = false,
-                      bool keepPartOrientation = false);
 class ProcessDiagram final : public QWidget
 {
     Q_OBJECT
@@ -92,9 +77,13 @@ class ProcessView final : public QWidget
 
   private:
     QStackedWidget* pages;
+    QCheckBox* simulationBlank;
     QListWidget* secondFixture;
+    QWidget* fixtureParameters = nullptr;
     QLabel* secondStock;
     QWidget* boringToolCard = nullptr;
+    QWidget* bodyToolCard = nullptr;
+    QWidget* partingParameters = nullptr;
     QLabel* boringToolFacts = nullptr;
     Parameters parameters;
     QMap<QString, int> fieldSections;

@@ -1,4 +1,4 @@
-#include "model.h"
+#include "postprocessor.h"
 #include <stdexcept>
 
 namespace pf
@@ -52,7 +52,7 @@ Program postprocess(const Plan& plan, const Calculations& c, const QString& cont
             code = "M5";
             break;
         case InstructionKind::Tool:
-            code = "T" + QString::number(i.tool) + " D1" + (siemens ? "" : " M66");
+            code = "T" + QString::number(i.tool) + " D" + QString::number(i.corrector) + (siemens ? "" : " M66");
             break;
         case InstructionKind::GeometryOffset:
             if (siemens)
@@ -61,6 +61,9 @@ Program postprocess(const Plan& plan, const Calculations& c, const QString& cont
             break;
         case InstructionKind::CoolantOn:
             code = "M8";
+            break;
+        case InstructionKind::ApproachFront:
+            code = "G0 Z" + number(i.value);
             break;
         case InstructionKind::Speed:
             code = "S" + number(i.value) + " M3";

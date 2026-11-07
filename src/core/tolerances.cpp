@@ -1,4 +1,6 @@
-#include "model.h"
+#include "tolerances.h"
+#include "engine.h"
+#include "tooling.h"
 #include <QRegularExpression>
 #include <array>
 #include <cmath>

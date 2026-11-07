@@ -1,4 +1,5 @@
-#include "model.h"
+#include "operations.h"
+#include "tooling.h"
 #include <QJsonDocument>
 
 namespace pf
@@ -33,14 +34,15 @@ QVector<Operation> operations(const Parameters& p, const Calculations& c)
                  " мм. Подготовленный торец принять исходным. Способ получения сквозного отверстия — вне данного "
                  "процесса."},
             {"010", "Токарная с ЧПУ — первый установ", "nc",
-             "Закрепить за наружную поверхность заготовки на длине " + localized(c.gripLength) +
-                 " мм. Передняя плоскость кулачков Z=" + localized(c.jawsFrontZ) + " мм, осевой зазор " +
-                 localized(c.chuckClearance) +
+             "Закрепить за наружную поверхность заготовки с вылетом " + localized(c.stockOverhang) +
+                 " мм. Участок внутри патрона " + localized(c.gripLength) + " мм. Передняя плоскость кулачков Z=" +
+                 localized(c.jawsFrontZ) + " мм, осевой зазор " + localized(c.chuckClearance) +
                  " мм. G54: Z0 — подготовленный передний торец, X0 — ось вращения; X задаётся по диаметру. Обработать "
                  "буртик, тело, сквозное отверстие и внутреннюю ступень. Длина до отделения " +
                  localized(c.cutLength) + " мм, задний припуск " + localized(p.n("trimAllowance")) +
-                 " мм. Инструменты: SCLCR 2525M12 и " + boringTool(p).name +
-                 ", пластина CCMT 12 04 04-PF 4425, R0,4; галтели "
+                 " мм. Буртик: " + turningToolName(p) + "; тело к буртику (+Z): " + bodyToolName(p) +
+                 "; отверстия: " + boringTool(p).name +
+                 ". Радиус вершины 0,4 мм; галтели "
                  "R≤0,5. Непрерывная СОЖ."},
             {"020", "Токарная с ЧПУ — второй установ", "nc",
              "До запуска УП отделить деталь: отрезная полоса Z=" + localized(c.partingFrontZ) + "…" +

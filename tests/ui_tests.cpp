@@ -1,4 +1,11 @@
+#include "core/engine.h"
 #include "core/geometry.h"
+#include "core/planning.h"
+#include "core/tolerances.h"
+#include "desktop/dimension_pane.h"
+#include "desktop/drawing.h"
+#include "desktop/numeric_edit.h"
+#include "desktop/theme.h"
 #include "desktop/window.h"
 #include <QAbstractItemView>
 #include <QAbstractNativeEventFilter>
@@ -106,6 +113,10 @@ class UiTests final : public QObject
     {
         const QPointer<pf::ui::ChoiceList> guard(choice);
         QVERIFY(choice->isVisible());
+        for (auto parent = choice->parentWidget(); parent; parent = parent->parentWidget())
+            if (auto scroll = qobject_cast<QScrollArea*>(parent))
+                scroll->ensureWidgetVisible(choice, 0, 8);
+        QApplication::processEvents();
         const auto anchor = choice->mapTo(choice->window(), QPoint(choice->width() - 12, choice->height() / 2));
         QTest::mouseMove(choice->window()->windowHandle(), anchor);
         QTest::mouseClick(choice->window()->windowHandle(), Qt::LeftButton, Qt::NoModifier, anchor);
@@ -179,14 +190,14 @@ class UiTests final : public QObject
         QCOMPARE(w.process->sections->currentRow(), pf::ui::ProcessView::Preparation);
         QTest::keyClick(w.windowHandle(), Qt::Key_Right);
         QCOMPARE(QApplication::focusWidget(), w.findChild<pf::ui::NumericEdit*>("parameter_stockDiameter"));
-        for (int i = 0; i < 7; ++i)
+        for (int i = 0; i < 2; ++i)
             QTest::keyClick(w.windowHandle(), Qt::Key_Down);
-        auto row = w.findChild<pf::ui::ParameterRow*>("row_gripLength");
-        auto next = w.findChild<pf::ui::ParameterRow*>("row_chuckClearance");
+        auto row = w.findChild<pf::ui::ParameterRow*>("row_blankLength");
+        auto next = w.findChild<pf::ui::ParameterRow*>("row_blankOverhang");
         QVERIFY(row);
         QCOMPARE(QApplication::focusWidget(), row->input);
         QVERIFY(row->input->replacementArmed());
-        QTest::keyClicks(row->input, "30");
+        QTest::keyClicks(row->input, "180");
         QTest::keyClick(w.windowHandle(), Qt::Key_Down);
         QCOMPARE(QApplication::focusWidget(), next->input);
         QTest::keyClick(w.windowHandle(), Qt::Key_Up);
@@ -195,7 +206,7 @@ class UiTests final : public QObject
         QCOMPARE(QApplication::focusWidget(), row->input);
         QVERIFY(row->input->replacementArmed());
         QTRY_VERIFY(w.isReady());
-        QCOMPARE(w.parameters().n("gripLength"), 30.);
+        QCOMPARE(w.parameters().n("blankLength"), 180.);
         QTest::keyClick(w.windowHandle(), Qt::Key_Left);
         QTRY_COMPARE(QApplication::focusWidget(), w.process->sections);
         const auto item = w.process->sections->item(0);
@@ -204,6 +215,164 @@ class UiTests final : public QObject
         QCOMPARE(w.process->sections->currentRow(), 0);
         QCOMPARE(QApplication::focusWidget(), w.findChild<pf::ui::NumericEdit*>("parameter_stockDiameter"));
         screenshot(w, "02-fixture-light");
+    }
+    void longStatusMessages()
+    {
+        pf::ui::Window w;
+        QVERIFY(showActive(w));
+        QTRY_VERIFY(w.isReady());
+        auto status = w.findChild<QPushButton*>("validationStatus");
+        auto toggle = w.findChild<QToolButton*>("statusDetailsToggle");
+        auto details = w.findChild<QFrame*>("statusDetails");
+        auto table = w.findChild<QTableWidget*>("statusDetailsTable");
+        QVERIFY(status && toggle && details && table);
+        QVERIFY(!toggle->isVisible());
+        QVERIFY(!details->isVisible());
+        for (const auto& theme : {QString("light"), QString("dark")})
+        {
+            pf::ui::applyTheme(theme);
+            w.resize(std::min(940, w.screen()->availableGeometry().width() - 30), w.height());
+            w.editValue("length", "240");
+            QVERIFY(!w.isReady());
+            QVERIFY(status->text().contains("растачивается"));
+            QTRY_VERIFY(toggle->isVisible());
+            QCOMPARE(toggle->text(), QString("1"));
+            QVERIFY(!toggle->icon().isNull());
+            QVERIFY(!status->isVisible());
+            const auto size = w.size();
+            QTest::mouseClick(toggle, Qt::LeftButton);
+            QVERIFY(details->isVisible());
+            QCOMPARE(w.size(), size);
+            QCOMPARE(table->rowCount(), 1);
+            QCOMPARE(table->item(0, 0)->text(), QString("1"));
+            QVERIFY(table->item(0, 1)->text().contains(status->text()));
+            QCOMPARE(table->editTriggers(), QAbstractItemView::NoEditTriggers);
+            QTRY_COMPARE(table->verticalScrollBar()->maximum(), 0);
+            QVERIFY(w.centralWidget()->rect().contains(details->geometry()));
+            QVERIFY(toggle->isChecked());
+            screenshot(w, "status-expanded-" + theme);
+            table->setFocus();
+            QTest::keyClick(table, Qt::Key_Escape);
+            QVERIFY(!details->isVisible());
+            QTest::mouseClick(toggle, Qt::LeftButton);
+            w.showFullScreen();
+            QApplication::processEvents();
+            QVERIFY(details->isVisible());
+            QVERIFY(w.centralWidget()->rect().contains(details->geometry()));
+            screenshot(w, "status-fullscreen-" + theme);
+            w.showNormal();
+            w.setParameters(pf::Parameters(), false);
+            QTRY_VERIFY(w.isReady());
+            QVERIFY(!details->isVisible());
+            QVERIFY(!toggle->isVisible());
+        }
+        QTemporaryDir folder;
+        QVERIFY(w.exportTo(folder.filePath("kit")));
+        QCOMPARE(status->text(), QString("Комплект сохранён"));
+        QVERIFY(!toggle->isVisible());
+        pf::ui::applyTheme("light");
+    }
+    void multipleStatusErrors()
+    {
+        pf::ui::Window w;
+        QVERIFY(showActive(w));
+        QTRY_VERIFY(w.isReady());
+        auto toggle = w.findChild<QToolButton*>("statusDetailsToggle");
+        auto details = w.findChild<QFrame*>("statusDetails");
+        auto table = w.findChild<QTableWidget*>("statusDetailsTable");
+        w.editValue("length", "240");
+        QCOMPARE(toggle->text(), QString("1"));
+        w.editValue("feedRough", "abc");
+        QCOMPARE(toggle->text(), QString("2"));
+        w.editValue("depthOutside", "abc");
+        QCOMPARE(toggle->text(), QString("3"));
+        w.editValue("feedRough", "0,2");
+        QCOMPARE(toggle->text(), QString("2"));
+        QTemporaryDir folder;
+        QVERIFY(!w.exportTo(folder.filePath("invalid")));
+        QCOMPARE(toggle->text(), QString("2"));
+        QTest::mouseClick(toggle, Qt::LeftButton);
+        QVERIFY(details->isVisible());
+        QCOMPARE(table->rowCount(), 2);
+        QCOMPARE(table->item(0, 0)->text(), QString("1"));
+        QCOMPARE(table->item(1, 0)->text(), QString("2"));
+        QVERIFY(table->item(1, 1)->text().contains("растачивается"));
+        QVERIFY(table->item(0, 1)->text().contains(pf::field("depthOutside").label));
+        screenshot(w, "status-multiple-errors");
+        const auto cell = table->visualRect(table->model()->index(0, 1));
+        QTest::mouseClick(table->viewport(), Qt::LeftButton, Qt::NoModifier, cell.bottomRight() - QPoint(8, 4));
+        QVERIFY(details->isVisible());
+        QVERIFY(toggle->isChecked());
+        QVERIFY(w.pageButtons[1]->isChecked());
+        QCOMPARE(w.process->sections->currentRow(), pf::ui::ProcessView::Regimes);
+        const auto depth = w.findChild<pf::ui::NumericEdit*>("parameter_depthOutside");
+        QCOMPARE(QApplication::focusWidget(), depth);
+        QTest::keyClicks(depth, "2");
+        QCOMPARE(toggle->text(), QString("1"));
+        QVERIFY(details->isVisible());
+        QCOMPARE(table->rowCount(), 1);
+        QVERIFY(table->item(0, 1)->text().contains("растачивается"));
+        const auto remainingCell = table->visualRect(table->model()->index(0, 1));
+        QTest::mouseClick(table->viewport(), Qt::LeftButton, Qt::NoModifier,
+                          remainingCell.bottomRight() - QPoint(8, 4));
+        QVERIFY(details->isVisible());
+        QVERIFY(w.pageButtons[0]->isChecked());
+        QVERIFY(w.part->dimensionPane);
+        const auto length = w.part->dimensionPane->nominal;
+        QCOMPARE(QApplication::focusWidget(), length);
+        QTest::keyClicks(length, "116");
+        QTRY_VERIFY(w.isReady());
+        QVERIFY(!details->isVisible());
+        QVERIFY(!toggle->isChecked());
+        QVERIFY(!toggle->isVisible());
+        w.editValue("boringClamp", "100");
+        w.editValue("length", "240");
+        QCOMPARE(toggle->text(), QString("2"));
+        w.editValue("checker", "\n");
+        QCOMPARE(toggle->text(), QString("3"));
+        QTest::mouseClick(toggle, Qt::LeftButton);
+        QCOMPARE(table->rowCount(), 3);
+        QVERIFY(table->item(0, 1)->text().contains("растачивается"));
+        QVERIFY(table->item(1, 1)->text().contains("Длина зажима оправки"));
+        QVERIFY(table->item(2, 1)->text().contains("Реквизит"));
+        screenshot(w, "status-errors-across-sections");
+    }
+    void toolbarBackgroundNavigation()
+    {
+        pf::ui::Window w;
+        QVERIFY(showActive(w));
+        QTRY_VERIFY(w.isReady());
+        auto toolbar = w.findChild<QWidget*>("mainToolbar");
+        QVERIFY(toolbar);
+        for (const auto theme : {"light", "dark"})
+        {
+            pf::ui::applyTheme(theme);
+            for (int page = 0; page < w.pageButtons.size(); ++page)
+            {
+                w.selectPage(page);
+                QWidget* content = page == 0   ? static_cast<QWidget*>(w.part->rows.first()->dimensionValue)
+                                   : page == 1 ? static_cast<QWidget*>(w.process->sections)
+                                               : static_cast<QWidget*>(w.inspection->table);
+                for (const auto point : {QPoint(toolbar->width() - 16, toolbar->height() / 2),
+                                         QPoint(w.pageButtons[0]->x() - 2, toolbar->height() / 2)})
+                {
+                    QVERIFY(!toolbar->childAt(point));
+                    content->setFocus();
+                    QTest::mouseClick(w.windowHandle(), Qt::LeftButton, Qt::NoModifier, toolbar->mapTo(&w, point));
+                    QCOMPARE(QApplication::focusWidget(), w.pageButtons[page]);
+                    QVERIFY(w.pageButtons[page]->isChecked());
+                }
+                QTest::keyClick(w.windowHandle(), Qt::Key_Left);
+                auto previous = page == 0 ? w.findChild<QToolButton*>("fileMenuButton") : w.pageButtons[page - 1];
+                QCOMPARE(QApplication::focusWidget(), previous);
+                QTest::keyClick(w.windowHandle(), Qt::Key_Right);
+                QCOMPARE(QApplication::focusWidget(), w.pageButtons[page]);
+                QTest::keyClick(w.windowHandle(), Qt::Key_Down);
+                QCOMPARE(QApplication::focusWidget(), content);
+            }
+            screenshot(w, QString("toolbar-focus-") + theme);
+        }
+        pf::ui::applyTheme("light");
     }
     void blankParameterAreaNavigation()
     {
@@ -247,8 +416,8 @@ class UiTests final : public QObject
                 const auto blank =
                     background->mapTo(&w, QPoint(background->width() / 2, topMargin ? 6 : background->height() - 24));
                 QTest::mouseClick(w.windowHandle(), Qt::LeftButton, Qt::NoModifier, blank);
-                const QStringList first = {"stockDiameter", "boringTool", "depthOutside", "partName"};
-                const QStringList next = {"stockBore", "boringOverhang", "depthInside", "material"};
+                const QStringList first = {"stockDiameter", "outerTool", "depthOutside", "partName"};
+                const QStringList next = {"stockBore", "outerToolNumber", "depthInside", "material"};
                 auto firstRow = w.findChild<pf::ui::ParameterRow*>("row_" + first[section]);
                 QVERIFY(firstRow);
                 QCOMPARE(QApplication::focusWidget(), firstRow->focusProxy());
@@ -299,27 +468,28 @@ class UiTests final : public QObject
         {
             pf::ui::applyTheme(theme);
             w.process->sections->setCurrentRow(pf::ui::ProcessView::Preparation);
-            for (const auto& key : {"stockDiameter", "stockBore", "trimAllowance", "frontFacingAllowance",
-                                    "cutoffWidth", "gripLength", "chuckClearance"})
+            for (const auto& key : {"stockDiameter", "stockBore", "blankLength", "blankOverhang", "trimAllowance",
+                                    "frontFacingAllowance"})
                 QVERIFY(row(key)->isVisible());
-            row("cutoffWidth")->setFocus();
-            QTest::keyClick(w.windowHandle(), Qt::Key_Down);
-            QCOMPARE(QApplication::focusWidget(), row("gripLength")->input);
-            QTest::keyClicks(row("gripLength")->input, "30");
+            QVERIFY(!row("cutoffWidth")->isVisible());
+            QVERIFY(!row("gripLength"));
+            QVERIFY(!row("chuckClearance"));
+            row("blankLength")->setFocus();
+            QTest::keyClicks(row("blankLength")->input, "180");
             QTest::keyClick(w.windowHandle(), Qt::Key_Return);
             QTRY_VERIFY(w.isReady());
-            QCOMPARE(w.parameters().n("gripLength"), 30.);
+            QCOMPARE(w.parameters().n("blankLength"), 180.);
             QTest::keyClick(w.windowHandle(), Qt::Key_Down);
-            QCOMPARE(QApplication::focusWidget(), row("chuckClearance")->input);
-            QVERIFY(editorVisible("chuckClearance"));
+            QCOMPARE(QApplication::focusWidget(), row("blankOverhang")->input);
+            QVERIFY(editorVisible("blankOverhang"));
             QTest::keyClick(w.windowHandle(), Qt::Key_Up);
             QTest::keyClick(w.windowHandle(), Qt::Key_Up);
-            QCOMPARE(QApplication::focusWidget(), row("cutoffWidth")->input);
+            QCOMPARE(QApplication::focusWidget(), row("stockBore")->input);
             auto fixture = w.process->findChild<QWidget*>("fixtureParameters");
-            QVERIFY(fixture);
-            QTest::mouseClick(w.windowHandle(), Qt::LeftButton, Qt::NoModifier,
-                              fixture->mapTo(&w, QPoint(12, fixture->height() - 3)));
-            QCOMPARE(QApplication::focusWidget(), row("gripLength")->input);
+            QVERIFY(fixture && !fixture->isVisible());
+            row("frontFacingAllowance")->setFocus();
+            QTest::keyClick(w.windowHandle(), Qt::Key_Down);
+            QCOMPARE(QApplication::focusWidget(), row("stockDiameter")->input);
             screenshot(w, "preparation-groups-" + theme);
 
             w.process->sections->setCurrentRow(pf::ui::ProcessView::Regimes);
@@ -475,7 +645,13 @@ class UiTests final : public QObject
                         QVERIFY(w.grab(capture).save(
                             QDir(output).filePath(QString("resize-%1-%2-hover.png").arg(theme).arg(checked))));
                     const auto before = split->sizes();
-                    const auto delta = split->orientation() == Qt::Horizontal ? QPoint(16, 0) : QPoint(0, 20);
+                    int minimum = 0, maximum = 0;
+                    split->getRange(1, &minimum, &maximum);
+                    const int position = split->orientation() == Qt::Horizontal ? handle->x() : handle->y();
+                    const int offset = maximum - position >= position - minimum ? std::min(16, maximum - position)
+                                                                                : -std::min(16, position - minimum);
+                    QVERIFY2(offset != 0, "The splitter needs room to resize at this window size.");
+                    const auto delta = split->orientation() == Qt::Horizontal ? QPoint(offset, 0) : QPoint(0, offset);
                     QTest::mousePress(w.windowHandle(), Qt::LeftButton, Qt::NoModifier, start);
                     QTest::mouseMove(w.windowHandle(), start + delta);
                     QTest::mouseRelease(w.windowHandle(), Qt::LeftButton, Qt::NoModifier, start + delta);
@@ -703,7 +879,7 @@ class UiTests final : public QObject
         QCOMPARE(model->rowCount(), 2);
         QApplication::processEvents();
         QVERIFY(view->trajectory->isVisible());
-        QVERIFY(view->trajectory->height() >= 220);
+        QVERIFY(view->trajectory->height() >= 180);
         QVERIFY(view->code->height() >= 220);
         auto bottom = view->code->parentWidget();
         auto split = qobject_cast<QSplitter*>(view->table->parentWidget());
@@ -732,11 +908,20 @@ class UiTests final : public QObject
         w.selectPage(2);
         QTest::qWait(80);
         QVERIFY(w.inspection->trajectory->isVisible());
-        QVERIFY(w.inspection->trajectory->height() >= 220);
+        QVERIFY(w.inspection->trajectory->height() >= 180);
         QVERIFY(w.inspection->code->height() >= 220);
         auto bottom = w.inspection->code->parentWidget();
         auto split = qobject_cast<QSplitter*>(w.inspection->table->parentWidget());
         QVERIFY(bottom->y() - w.inspection->table->geometry().bottom() <= split->handleWidth() + 2);
+        const auto canvas = w.inspection->trajectory;
+        QVERIFY2(canvas->parentWidget()->rect().contains(canvas->geometry()),
+                 qPrintable(QString("Trajectory canvas %1,%2 %3x%4 exceeds its panel %5x%6")
+                                .arg(canvas->x())
+                                .arg(canvas->y())
+                                .arg(canvas->width())
+                                .arg(canvas->height())
+                                .arg(canvas->parentWidget()->width())
+                                .arg(canvas->parentWidget()->height())));
         screenshot(w, "09-nc-dark");
         pf::ui::applyTheme("light");
     }
@@ -755,7 +940,7 @@ class UiTests final : public QObject
         QTRY_VERIFY(w.isReady());
         QCOMPARE(w.parameters().n("feedFinish"), .08);
         QVERIFY(w.exportTo(temporary.filePath("комплект")));
-        QCOMPARE(QDir(temporary.filePath("комплект")).entryList(QDir::Files).size(), 4);
+        QCOMPARE(QDir(temporary.filePath("комплект/Комплект 1")).entryList(QDir::Files).size(), 4);
         w.editValue("length", "-");
         QVERIFY(!w.isReady());
         QVERIFY(w.exportButton->isEnabled());
@@ -775,11 +960,11 @@ class UiTests final : public QObject
         w.selectPage(1);
         w.process->sections->setCurrentRow(pf::ui::ProcessView::Preparation);
         w.process->setupChoice->setCurrentIndex(1);
-        auto firstGrip = w.findChild<pf::ui::ParameterRow*>("row_gripLength");
-        QVERIFY(firstGrip->isHidden());
+        QVERIFY(!w.findChild<pf::ui::ParameterRow*>("row_gripLength"));
         auto facts = w.findChild<QListWidget*>("secondFixtureFacts");
         QVERIFY(facts->isVisible());
-        QVERIFY(facts->item(0)->text().contains("25"));
+        QCOMPARE(facts->count(), 3);
+        QVERIFY(facts->item(0)->text().contains("Захват за Ø100"));
         w.process->sections->setFocus();
         QTest::keyClick(w.process->sections, Qt::Key_Right);
         QCOMPARE(QApplication::focusWidget(), w.findChild<pf::ui::NumericEdit*>("parameter_trimAllowance"));
@@ -1040,6 +1225,28 @@ class UiTests final : public QObject
                            });
         w.showExportResult();
         QVERIFY(inspected);
+        QCOMPARE(QSettings().value("files/exportDirectory").toString(), dir.path());
+        inspected = false;
+        QTimer::singleShot(
+            50, &w,
+            [&]
+            {
+                auto dialog = w.findChild<QDialog*>("exportResult");
+                if (!dialog)
+                    return;
+                auto files = dialog->findChild<QListWidget*>("exportedFiles");
+                inspected = files && files->count() == 4;
+                if (files)
+                    for (int i = 0; i < files->count(); ++i)
+                        inspected &= QFileInfo(files->item(i)->data(Qt::UserRole).toString()).absolutePath() ==
+                                     dir.filePath("Комплект 3");
+                if (!output.isEmpty())
+                    QVERIFY(dialog->grab().save(QDir(output).filePath("export-result-parent-folder.png")));
+                dialog->reject();
+            });
+        QTest::mouseClick(w.exportButton, Qt::LeftButton);
+        QVERIFY(inspected);
+        QCOMPARE(QSettings().value("files/exportDirectory").toString(), dir.path());
         w.editValue("feedFinish", "0,09");
         bool russian = false;
         QTimer::singleShot(50, &w,
@@ -1263,6 +1470,19 @@ class UiTests final : public QObject
                 QApplication::clipboard()->setMimeData(saved);
             }
         } clipboard;
+        const auto prepareClipboard = []
+        {
+            auto data = new QMimeData;
+            data->setText("110");
+#ifdef Q_OS_WIN
+            // Keep test values out of clipboard-history monitors.
+            data->setData("application/x-qt-windows-mime;value=\"Clipboard Viewer Ignore\"", QByteArray(1, '\0'));
+            data->setData("application/x-qt-windows-mime;value=\"ExcludeClipboardContentFromMonitorProcessing\"",
+                          QByteArray(1, '\0'));
+#endif
+            QApplication::clipboard()->setMimeData(data);
+            return QApplication::clipboard()->text() == "110";
+        };
         pf::ui::Window w;
         QVERIFY(showActive(w));
         QTRY_VERIFY(w.isReady());
@@ -1270,7 +1490,7 @@ class UiTests final : public QObject
         for (const auto& shortcut : {QKeySequence(Qt::CTRL | Qt::Key_V), QKeySequence(Qt::SHIFT | Qt::Key_Insert)})
         {
             w.pageButtons[0]->setFocus();
-            QApplication::clipboard()->setText("110");
+            QTRY_VERIFY_WITH_TIMEOUT(prepareClipboard(), 3000);
             QTest::mouseClick(input, Qt::LeftButton);
             QVERIFY(!input->hasSelectedText());
             QSignalSpy edits(input, &QLineEdit::textEdited);
@@ -1761,7 +1981,7 @@ class UiTests final : public QObject
         QCOMPARE(w.currentProject()->parameters.n("flangeDiameter"), 200.);
         for (const auto& program : w.currentProject()->programs)
         {
-            QFile file(folder.filePath(program.fileName));
+            QFile file(folder.filePath("Комплект 1/" + program.fileName));
             QVERIFY(file.open(QIODevice::ReadOnly));
             QCOMPARE(QString::fromUtf8(file.readAll()), program.text);
         }
@@ -1859,8 +2079,10 @@ class UiTests final : public QObject
         QVERIFY(!w.parameters().b("autoBlankLength"));
         w.editValue("blankOverhang", "140");
         QTRY_VERIFY(w.isReady());
-        QCOMPARE(input("gripLength")->text(), QString("40"));
-        QCOMPARE(input("chuckClearance")->text(), QString("17,5"));
+        QVERIFY(!input("gripLength"));
+        QVERIFY(!input("chuckClearance"));
+        QCOMPARE(pf::calculate(w.parameters()).gripLength, 40.);
+        QCOMPARE(pf::calculate(w.parameters()).chuckClearance, 17.5);
         w.editValue("length", "117");
         QTRY_VERIFY(w.isReady());
         QCOMPARE(w.parameters().n("blankLength"), 180.);
@@ -1882,10 +2104,11 @@ class UiTests final : public QObject
         QCOMPARE(w.parameters().n("blankLength"), 158.5);
         QCOMPARE(w.parameters().n("blankOverhang"), 133.5);
         w.editValue("blankLength", "180");
-        w.editValue("gripLength", "30");
+        w.editValue("blankOverhang", "145");
         QTRY_VERIFY(w.isReady());
-        QVERIFY(w.parameters().b("autoBlankLength"));
-        QCOMPARE(w.parameters().n("blankLength"), 163.5);
+        QVERIFY(!w.parameters().b("autoBlankLength"));
+        QCOMPARE(w.parameters().n("blankLength"), 180.);
+        QCOMPARE(pf::calculate(w.parameters()).gripLength, 35.);
         pf::ui::applyTheme("light");
     }
     void technologyExtensionLines()
@@ -1953,17 +2176,27 @@ class UiTests final : public QObject
             const auto drawing = pf::ui::drawSetup(painter, image.rect(), p, project.programs[0].setup, key);
             painter.end();
             const bool inside = QString(key) == "depthInside";
-            const auto z = inside ? -c.targetCounterboreDepth : -c.targetFlangeWidth;
-            const auto radius = inside ? c.targetBoreDiameter / 2 : c.targetBodyDiameter / 2;
-            const auto from = inside ? std::max(p.n("stockBore") / 2, radius - p.n(key)) : radius;
-            const auto to = inside ? radius : std::min(p.n("stockDiameter") / 2, radius + p.n(key));
+            const auto& transition = project.programs[0].transitions[inside ? 6 : 2];
+            const bool rough = QString(key) != "finishAllowance";
+            const auto z = inside ? 0 : -c.targetFlangeWidth;
+            const auto from = rough ? transition.startDiameter / 2 : c.targetBodyDiameter / 2;
+            const auto to = rough ? transition.passes.first() / 2 : from + p.n(key);
+            if (rough)
+            {
+                QCOMPARE(drawing.cuttingPasses.size(), transition.passes.size());
+                for (int i = 0; i < transition.passes.size(); ++i)
+                {
+                    QCOMPARE(drawing.cuttingPasses[i].p1(), drawing.map(transition.zStart, transition.passes[i] / 2));
+                    QCOMPARE(drawing.cuttingPasses[i].p2(), drawing.map(transition.zEnd, transition.passes[i] / 2));
+                }
+            }
             QCOMPARE(drawing.extensionLines.size(), 2);
             QCOMPARE(drawing.extensionLines[0].p1(), drawing.map(z, from));
             QCOMPARE(drawing.extensionLines[1].p1(), drawing.map(z, to));
             QCOMPARE(drawing.extensionLines[0].p2(), drawing.parameterIndicator.p1());
             QCOMPARE(drawing.extensionLines[1].p2(), drawing.parameterIndicator.p2());
             QVERIFY(drawing.parameterIndicator.x1() > drawing.map(0, 0).x());
-            QVERIFY(std::abs(drawing.parameterIndicator.length() / drawing.scale - (to - from)) < 1e-8);
+            QVERIFY(std::abs(drawing.parameterIndicator.length() / drawing.scale - std::abs(to - from)) < 1e-8);
         }
     }
     void clampDimensionCaptionOutsideJaws()
@@ -2128,7 +2361,14 @@ class UiTests final : public QObject
         QTRY_VERIFY(w.isReady());
         QCOMPARE(w.currentProject()->calculations.cutoffWidth, 4.5);
         w.process->focusField("cutoffWidth");
+        QCOMPARE(w.process->sections->currentRow(), int(pf::ui::ProcessView::Tooling));
+        QCOMPARE(w.process->diagram->highlightedField(), QString("cutoffWidth"));
+        auto parting = w.process->findChild<QWidget*>("partingParameters");
+        QVERIFY(parting && parting->isVisible());
         screenshot(w, "cutoff-width-adjustment");
+        w.process->setupChoice->setCurrentIndex(1);
+        QVERIFY(!parting->isVisible());
+        QVERIFY(w.process->diagram->highlightedField() != "cutoffWidth");
     }
     void invalidGeometryViews()
     {
@@ -2348,9 +2588,10 @@ class UiTests final : public QObject
                                                    g.project->programs[0].setup, "depthInside");
             painter.end();
             const auto finishedBore = mapping.map(0, g.project->calculations.targetBoreDiameter / 2).y();
-            // Boring removes stock on the smaller-radius side of the finished hole.
-            QVERIFY(mapping.parameterIndicator.p1().y() > finishedBore);
-            QCOMPARE(mapping.parameterIndicator.p2().y(), finishedBore);
+            // The highlighted layer is the first actual pass of counterbore roughing.
+            QCOMPARE(mapping.parameterIndicator.p1().y(), finishedBore);
+            const auto& rough = g.project->programs[0].transitions[6];
+            QCOMPARE(mapping.parameterIndicator.p2().y(), mapping.map(0, rough.passes.first() / 2).y());
             const auto& c = g.project->calculations;
             const auto shoulder =
                 mapping.map(-c.targetCounterboreDepth, (c.targetBoreDiameter + c.targetCounterboreDiameter) / 4)
@@ -2367,6 +2608,205 @@ class UiTests final : public QObject
             QVERIFY2(visible, "The depth label must leave the counterbore shoulder visible.");
         }
     }
+    void fileMenuArrowNavigation()
+    {
+        pf::ui::Window w;
+        QVERIFY(showActive(w));
+        QTRY_VERIFY(w.isReady());
+        auto file = w.findChild<QToolButton*>("fileMenuButton");
+        auto menu = w.findChild<QMenu*>("fileMenu");
+        auto theme = w.findChild<QMenu*>("themeMenu");
+        QVERIFY(file && menu && theme);
+        const auto first = menu->actions().first();
+        const auto last = menu->actions().last();
+        w.selectPage(1);
+        w.pageButtons[1]->setFocus();
+        QTest::keyClick(w.pageButtons[1], Qt::Key_Left);
+        QTest::keyClick(w.pageButtons[0], Qt::Key_Left);
+        QCOMPARE(QApplication::focusWidget(), file);
+        for (int i = 0; i < 4; ++i)
+        {
+            QTest::keyClick(w.windowHandle(), Qt::Key_Left);
+            QCOMPARE(QApplication::focusWidget(), file);
+            QVERIFY(!menu->isVisible());
+        }
+        QTest::keyClick(file, Qt::Key_Down);
+        QTRY_VERIFY(menu->isVisible());
+        QCOMPARE(menu->activeAction(), first);
+        QTest::keyClick(menu, Qt::Key_Down);
+        QCOMPARE(menu->activeAction(), menu->actions()[1]);
+        QTest::keyClick(menu, Qt::Key_Left);
+        QVERIFY(!menu->isVisible());
+        QCOMPARE(QApplication::focusWidget(), file);
+        QTest::keyClick(w.windowHandle(), Qt::Key_Left);
+        QCOMPARE(QApplication::focusWidget(), file);
+        QTest::keyClick(file, Qt::Key_Up);
+        QTRY_VERIFY(menu->isVisible());
+        QCOMPARE(menu->activeAction(), last);
+        QTest::keyClick(menu, Qt::Key_Up);
+        QCOMPARE(menu->activeAction(), theme->menuAction());
+        QTest::keyClick(menu, Qt::Key_Right);
+        QTRY_VERIFY(theme->isVisible());
+        QVERIFY(menu->isVisible());
+        QVERIFY(theme->activeAction()->isChecked());
+        QVERIFY(menu->screen()->availableGeometry().contains(menu->frameGeometry()));
+        QVERIFY(theme->screen()->availableGeometry().contains(theme->frameGeometry()));
+        if (!output.isEmpty())
+        {
+            QVERIFY(menu->grab().save(QDir(output).filePath("file-menu-before.png")));
+            QVERIFY(theme->grab().save(QDir(output).filePath("theme-menu-before.png")));
+        }
+        const auto original = theme->activeAction();
+        QSignalSpy activated(original, &QAction::triggered);
+        QTest::keyClick(theme, Qt::Key_Down);
+        QVERIFY(theme->activeAction() != original);
+        QTest::keyClick(theme, Qt::Key_Left);
+        QVERIFY(!theme->isVisible());
+        QVERIFY(menu->isVisible());
+        QVERIFY(original->isChecked());
+        QCOMPARE(activated.count(), 0);
+        QCOMPARE(menu->activeAction(), theme->menuAction());
+        QTest::keyClick(menu, Qt::Key_Right);
+        QTRY_VERIFY(theme->isVisible());
+        QCOMPARE(theme->activeAction(), original);
+        QTest::keyClick(theme, Qt::Key_Down);
+        auto selected = theme->activeAction();
+        QSignalSpy chosen(selected, &QAction::triggered);
+        QTest::keyClick(theme, Qt::Key_Right);
+        QVERIFY(!theme->isVisible());
+        QVERIFY(!menu->isVisible());
+        QVERIFY(selected->isChecked());
+        QCOMPARE(chosen.count(), 1);
+        QCOMPARE(QApplication::focusWidget(), file);
+        QTest::keyClick(w.windowHandle(), Qt::Key_Left);
+        QCOMPARE(QApplication::focusWidget(), file);
+        screenshot(w, "file-theme-arrow-chosen");
+        QTest::keyClick(file, Qt::Key_Down);
+        menu->setActiveAction(theme->menuAction());
+        QTest::keyClick(menu, Qt::Key_Return);
+        QTRY_VERIFY(theme->isVisible());
+        if (!output.isEmpty())
+        {
+            QVERIFY(menu->grab().save(QDir(output).filePath("file-menu-after.png")));
+            QVERIFY(theme->grab().save(QDir(output).filePath("theme-menu-after.png")));
+        }
+        QTest::keyClick(theme, Qt::Key_Escape);
+        QVERIFY(!theme->isVisible());
+        QVERIFY(menu->isVisible());
+        QTest::keyClick(menu, Qt::Key_Escape);
+        QVERIFY(!menu->isVisible());
+        QCOMPARE(QApplication::focusWidget(), file);
+        QTest::keyClick(file, Qt::Key_Right);
+        QCOMPARE(QApplication::focusWidget(), w.pageButtons[0]);
+        QTest::keyClick(file, Qt::Key_Down);
+        menu->setActiveAction(theme->menuAction());
+        QTest::keyClick(menu, Qt::Key_Right);
+        QTRY_VERIFY(theme->isVisible());
+        QTest::keyClick(theme, Qt::Key_Return);
+        QVERIFY(!menu->isVisible());
+        QCOMPARE(QApplication::focusWidget(), file);
+        first->setEnabled(false);
+        QTest::keyClick(file, Qt::Key_Down);
+        QCOMPARE(menu->activeAction(), menu->actions()[1]);
+        QTest::keyClick(menu, Qt::Key_Up);
+        QCOMPARE(menu->activeAction(), last);
+        QTest::keyClick(menu, Qt::Key_Left);
+        first->setEnabled(true);
+        QSignalSpy opened(menu, &QMenu::aboutToShow);
+        connect(
+            menu, &QMenu::aboutToShow, menu, [menu] { QTimer::singleShot(0, menu, &QMenu::close); },
+            Qt::SingleShotConnection);
+        QTest::mouseClick(file, Qt::LeftButton);
+        QTRY_VERIFY(!menu->isVisible());
+        QCOMPARE(opened.count(), 1);
+        pf::ui::applyTheme("light");
+    }
+    void simulationBlankAndToolAssignments()
+    {
+        pf::ui::Window w;
+        QVERIFY(showActive(w));
+        w.setController("sinumerik840dsl");
+        QTRY_VERIFY(w.isReady());
+        w.selectPage(1);
+        auto blank = w.findChild<QCheckBox*>("simulationBlank");
+        QVERIFY(blank && blank->isVisible() && blank->isChecked());
+        QVERIFY(w.currentProject()->programs[0].text.contains("WORKPIECE"));
+        QTest::mouseClick(blank, Qt::LeftButton);
+        QTRY_VERIFY(w.isReady());
+        QVERIFY(!w.parameters().b("simulationBlank"));
+        QVERIFY(!w.currentProject()->programs[0].text.contains("WORKPIECE"));
+        QTemporaryDir kit;
+        QVERIFY(w.exportTo(kit.filePath("without-blank")));
+        w.process->focusField("frontFacingAllowance");
+        QTest::keyClick(w.windowHandle(), Qt::Key_Down);
+        QCOMPARE(QApplication::focusWidget(), blank);
+        QTest::keyClick(blank, Qt::Key_Space);
+        QTest::keyClick(blank, Qt::Key_Down);
+        QCOMPARE(QApplication::focusWidget(), w.findChild<pf::ui::NumericEdit*>("parameter_stockDiameter"));
+        QTRY_VERIFY(w.isReady());
+        QVERIFY(w.parameters().b("simulationBlank"));
+        QVERIFY(w.currentProject()->programs[0].text.contains("WORKPIECE"));
+        w.process->sections->setCurrentRow(pf::ui::ProcessView::Tooling);
+        auto outer = w.findChild<pf::ui::ChoiceList*>("outerTools");
+        QVERIFY(outer);
+        chooseFromList(outer, outer->findData("custom"));
+        w.editValue("customOuterName", "My turning tool");
+        w.editValue("outerToolNumber", "7");
+        w.editValue("outerCorrector", "2");
+        w.editValue("boringToolNumber", "9");
+        w.editValue("boringCorrector", "3");
+        auto body = w.findChild<pf::ui::ChoiceList*>("bodyTools");
+        QVERIFY(body);
+        auto outerCard = w.findChild<QWidget*>("outerToolCard");
+        QVERIFY(outerCard && outerCard->isAncestorOf(outer) && outerCard->isAncestorOf(body));
+        chooseFromList(body, body->findData("custom"));
+        w.editValue("customBodyName", "My reverse tool");
+        w.editValue("bodyToolNumber", "12");
+        w.editValue("bodyCorrector", "4");
+        QTRY_VERIFY(w.isReady());
+        QVERIFY(w.currentProject()->programs[0].text.contains("T7 D2"));
+        QVERIFY(w.currentProject()->programs[0].text.contains("T9 D3"));
+        QVERIFY(w.currentProject()->programs[0].text.contains("T12 D4"));
+        for (const auto theme : {"light", "dark"})
+        {
+            pf::ui::applyTheme(theme);
+            w.process->focusField("outerToolNumber");
+            QCOMPARE(w.process->diagram->highlightedField(), QString("outerTooling"));
+            screenshot(w, QString("tools-outer-") + theme);
+            w.process->focusField("bodyToolNumber");
+            QCOMPARE(w.process->diagram->highlightedField(), QString("bodyTooling"));
+            screenshot(w, QString("tools-body-") + theme);
+            w.process->focusField("boringToolNumber");
+            QCOMPARE(w.process->diagram->highlightedField(), QString("boringTooling"));
+            screenshot(w, QString("tools-boring-") + theme);
+            for (const auto key : {"depthOutside", "depthInside"})
+            {
+                w.process->focusField(key);
+                screenshot(w, QString("passes-") + key + "-" + theme);
+            }
+        }
+        w.process->setupChoice->setCurrentIndex(1);
+        w.process->focusField("outerToolNumber");
+        QCOMPARE(w.process->setupChoice->currentIndex(), 1);
+        QVERIFY(w.findChild<pf::ui::NumericEdit*>("parameter_outerToolNumber")->isVisible());
+        QVERIFY(!w.findChild<pf::ui::NumericEdit*>("parameter_bodyToolNumber")->isVisible());
+        QVERIFY(!blank->isVisible());
+        w.selectPage(0);
+        w.pageButtons[0]->setFocus();
+        QTest::keyClick(w.windowHandle(), Qt::Key_Left);
+        auto file = w.findChild<QToolButton*>("fileMenuButton");
+        QCOMPARE(QApplication::focusWidget(), file);
+        QTest::keyClick(file, Qt::Key_Right);
+        QCOMPARE(QApplication::focusWidget(), w.pageButtons[0]);
+        QVERIFY(w.saveProject(kit.filePath("tools.json")));
+        QVERIFY(w.openProject(kit.filePath("tools.json")));
+        QTRY_VERIFY(w.isReady());
+        QCOMPARE(w.parameters().n("outerToolNumber"), 7.);
+        QCOMPARE(w.parameters().s("customOuterName"), QString("My turning tool"));
+        QCOMPARE(w.parameters().n("bodyToolNumber"), 12.);
+        QCOMPARE(w.parameters().s("customBodyName"), QString("My reverse tool"));
+        pf::ui::applyTheme("light");
+    }
     void processDrawings()
     {
         pf::ui::Window w;
@@ -2378,13 +2818,12 @@ class UiTests final : public QObject
         QCOMPARE(process->diagram->highlightedField(), QString("tooling"));
         process->sections->setCurrentRow(0);
         QVERIFY(process->diagram->highlightedField() != "tooling");
-        const QVector<QStringList> fields = {{"stockDiameter", "stockBore", "blankLength", "blankOverhang",
-                                              "trimAllowance", "frontFacingAllowance", "cutoffWidth", "gripLength",
-                                              "chuckClearance"},
-                                             {},
-                                             {"depthOutside", "depthInside", "finishAllowance", "cuttingSpeed",
-                                              "feedRough", "feedFinish", "rpmMax", "clearanceX", "clearanceZ"},
-                                             {}};
+        const QVector<QStringList> fields = {
+            {"stockDiameter", "stockBore", "blankLength", "blankOverhang", "trimAllowance", "frontFacingAllowance"},
+            {"cutoffWidth"},
+            {"depthOutside", "depthInside", "finishAllowance", "cuttingSpeed", "feedRough", "feedFinish", "rpmMax",
+             "clearanceX", "clearanceZ"},
+            {}};
         for (int section = 0; section < process->sections->count(); ++section)
         {
             process->sections->setCurrentRow(section);

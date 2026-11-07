@@ -1,6 +1,7 @@
 #pragma once
 #include "core/model.h"
-#include "process_view.h"
+#include "controls.h"
+#include "setup_drawing.h"
 #include <QAbstractTableModel>
 #include <QCheckBox>
 #include <QLabel>

@@ -1,4 +1,5 @@
 #include "window.h"
+#include "theme.h"
 #include <QApplication>
 #include <QDir>
 #include <QFile>

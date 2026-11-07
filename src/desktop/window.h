@@ -2,9 +2,12 @@
 #include "inspection_view.h"
 #include "part_view.h"
 #include "process_view.h"
+#include <QFrame>
 #include <QFutureWatcher>
+#include <QLabel>
 #include <QMainWindow>
 #include <QPushButton>
+#include <QTableWidget>
 #include <QTimer>
 
 namespace pf::ui
@@ -57,7 +60,14 @@ class Window final : public QMainWindow
     QMap<QString, InvalidDraft> invalidDraft;
     QVector<Error> errors;
     QStackedWidget* pages;
-    QPushButton* status;
+    QPushButton* status = nullptr;
+    QToolButton* statusToggle = nullptr;
+    QFrame* statusDetails = nullptr;
+    QLabel* statusDetailsTitle = nullptr;
+    QTableWidget* statusDetailsTable = nullptr;
+    QVector<Error> statusEntries;
+    bool statusError = false;
+    bool updatingStatusDetails = false;
     ResizeGrip* windowGrip = nullptr;
     QTimer generationTimer;
     QFutureWatcher<Generation> watcher;
@@ -72,10 +82,15 @@ class Window final : public QMainWindow
     void startGeneration();
     void generationFinished();
     void showErrors(const QVector<Error>&);
+    void setStatusMessage(const QString&, bool error = false, const QVector<Error>& entries = {});
+    void updateStatusDetails();
+    QVector<Error> currentErrors() const;
+    void focusErrorField(const QString&);
     void editTolerance(const QString&, const QString&);
     void openDialog();
     void saveDialog(bool saveAs = false);
     void exportDialog();
+    bool chooseExportDirectory();
     bool confirmSave();
 };
 } // namespace pf::ui

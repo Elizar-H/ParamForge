@@ -1,18 +1,29 @@
 #include "window.h"
+#include "core/engine.h"
 #include "core/geometry.h"
+#include "core/tolerances.h"
+#include "dimension_pane.h"
 #include "files/projects.h"
+#include "numeric_edit.h"
+#include "theme.h"
 #include <QActionGroup>
 #include <QApplication>
 #include <QButtonGroup>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMessageBox>
+#include <QMouseEvent>
+#include <QPainterPath>
+#include <QPixmap>
 #include <QRegularExpression>
+#include <QScopedValueRollback>
 #include <QScreen>
 #include <QSettings>
 #include <QShortcut>
@@ -21,14 +32,67 @@
 #include <QStatusBar>
 #include <QStyle>
 #include <QStyleHints>
+#include <QStylePainter>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWindow>
 #include <QtConcurrent>
+#include <algorithm>
 #include <cmath>
 
 namespace pf::ui
 {
+namespace
+{
+QIcon errorIcon()
+{
+    const auto makeIcon = [](const QColor& color)
+    {
+        QIcon icon;
+        for (const double scale : {1., 1.25, 1.5, 2., 3., 4.})
+        {
+            QPixmap pixmap(qRound(18 * scale), qRound(18 * scale));
+            pixmap.setDevicePixelRatio(scale);
+            pixmap.fill(Qt::transparent);
+            QPainter painter(&pixmap);
+            painter.setRenderHint(QPainter::Antialiasing);
+            painter.setPen(QPen(color, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            QPainterPath outline;
+            outline.moveTo(9, 2);
+            outline.lineTo(16.3, 15.4);
+            outline.lineTo(1.7, 15.4);
+            outline.closeSubpath();
+            painter.drawPath(outline);
+            painter.drawLine(QPointF(9, 6.5), QPointF(9, 10.5));
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(color);
+            painter.drawEllipse(QPointF(9, 12.8), .8, .8);
+            painter.end();
+            icon.addPixmap(pixmap);
+        }
+        return icon;
+    };
+    static const QIcon light = makeIcon(QColor("#d32f2f"));
+    static const QIcon night = makeIcon(QColor("#ef4444"));
+    return dark() ? night : light;
+}
+class StatusButton final : public QPushButton
+{
+  public:
+    using QPushButton::QPushButton;
+
+  protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QStyleOptionButton option;
+        initStyleOption(&option);
+        const auto width = style()->subElementRect(QStyle::SE_PushButtonContents, &option, this).width();
+        option.text = fontMetrics().elidedText(text(), Qt::ElideRight, width);
+        QStylePainter painter(this);
+        painter.drawControl(QStyle::CE_PushButton, option);
+    }
+};
+} // namespace
 Window::Window(QWidget* parent) : QMainWindow(parent)
 {
     working.set("autoStock", true);
@@ -43,15 +107,20 @@ Window::Window(QWidget* parent) : QMainWindow(parent)
     setCentralWidget(root);
     auto header = new QWidget(root);
     header->setObjectName("mainToolbar");
+    header->installEventFilter(this);
     header->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto toolbar = new QHBoxLayout(header);
     toolbar->setContentsMargins(10, 6, 10, 6);
     toolbar->setSpacing(5);
     auto fileButton = new QToolButton(header);
     fileButton->setObjectName("fileMenuButton");
+    fileButton->setFocusPolicy(Qt::StrongFocus);
+    fileButton->installEventFilter(this);
     fileButton->setText("Файл");
     fileButton->setPopupMode(QToolButton::InstantPopup);
     auto fileMenu = new QMenu(fileButton);
+    fileMenu->setObjectName("fileMenu");
+    fileMenu->installEventFilter(this);
     fileButton->setMenu(fileMenu);
     connect(fileMenu->addAction("Новая деталь"), &QAction::triggered, this,
             [this]
@@ -67,6 +136,10 @@ Window::Window(QWidget* parent) : QMainWindow(parent)
     connect(fileMenu->addAction("Открыть…"), &QAction::triggered, this, &Window::openDialog);
     connect(fileMenu->addAction("Сохранить"), &QAction::triggered, this, [this] { saveDialog(); });
     connect(fileMenu->addAction("Сохранить как…"), &QAction::triggered, this, [this] { saveDialog(true); });
+    fileMenu->addSeparator();
+    auto exportFolder = fileMenu->addAction("Папка комплектов…");
+    exportFolder->setObjectName("exportDirectory");
+    connect(exportFolder, &QAction::triggered, this, [this] { chooseExportDirectory(); });
     fileMenu->addSeparator();
 
     toolbar->addWidget(fileButton);
@@ -100,6 +173,7 @@ Window::Window(QWidget* parent) : QMainWindow(parent)
 
     auto theme = fileMenu->addMenu("Тема");
     theme->setObjectName("themeMenu");
+    theme->installEventFilter(this);
     fileMenu->addSeparator();
     connect(fileMenu->addAction("Выход"), &QAction::triggered, this, &QWidget::close);
     themePreference = QSettings().value("appearance/theme", "system").toString();
@@ -134,35 +208,80 @@ Window::Window(QWidget* parent) : QMainWindow(parent)
     pages->addWidget(process);
     pages->addWidget(inspection);
     layout->addWidget(pages, 1);
-    status = new QPushButton(this);
+    auto messageBar = new QWidget(this);
+    messageBar->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    messageBar->setMinimumWidth(0);
+    auto messageLayout = new QHBoxLayout(messageBar);
+    messageLayout->setContentsMargins(0, 0, 0, 0);
+    messageLayout->setSpacing(0);
+    statusToggle = new QToolButton(messageBar);
+    statusToggle->setObjectName("statusDetailsToggle");
+    statusToggle->setCheckable(true);
+    statusToggle->setFixedHeight(28);
+    statusToggle->setMinimumWidth(24);
+    statusToggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    statusToggle->setIconSize(QSize(18, 18));
+    messageLayout->addWidget(statusToggle);
+    status = new StatusButton(messageBar);
     status->setFlat(true);
     status->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     status->setMinimumWidth(0);
     status->setObjectName("validationStatus");
-    status->setStyleSheet("QPushButton { border:none; background:transparent; text-align:left; padding:2px 8px; }");
-    statusBar()->addWidget(status, 1);
+    messageLayout->addWidget(status, 1);
+    messageLayout->addStretch(0);
+    statusBar()->addWidget(messageBar, 1);
+    statusDetails = new QFrame(root);
+    statusDetails->setObjectName("statusDetails");
+    auto detailsLayout = new QVBoxLayout(statusDetails);
+    detailsLayout->setContentsMargins(8, 8, 8, 8);
+    detailsLayout->setSpacing(6);
+    statusDetailsTitle = new QLabel(statusDetails);
+    auto titleFont = statusDetailsTitle->font();
+    titleFont.setBold(true);
+    statusDetailsTitle->setFont(titleFont);
+    detailsLayout->addWidget(statusDetailsTitle);
+    statusDetailsTable = new QTableWidget(0, 2, statusDetails);
+    statusDetailsTable->setObjectName("statusDetailsTable");
+    statusDetailsTable->setAccessibleName("Сообщения");
+    statusDetailsTable->setFrameShape(QFrame::NoFrame);
+    statusDetailsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    statusDetailsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    statusDetailsTable->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    statusDetailsTable->setWordWrap(true);
+    statusDetailsTable->setTextElideMode(Qt::ElideNone);
+    statusDetailsTable->setShowGrid(false);
+    statusDetailsTable->setAlternatingRowColors(true);
+    statusDetailsTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    statusDetailsTable->verticalHeader()->hide();
+    statusDetailsTable->horizontalHeader()->hide();
+    statusDetailsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    statusDetailsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    statusDetailsTable->setColumnWidth(0, 36);
+    detailsLayout->addWidget(statusDetailsTable);
+    statusDetails->hide();
+    root->installEventFilter(this);
+    status->installEventFilter(this);
+    statusToggle->installEventFilter(this);
+    statusDetailsTable->installEventFilter(this);
+    connect(statusToggle, &QToolButton::toggled, this, &Window::updateStatusDetails);
+    const auto activateStatusRow = [this](int row, int)
+    {
+        if (!statusDetails->isVisible() || row < 0 || row >= statusEntries.size())
+            return;
+        const auto key = statusEntries[row].field;
+        if (!key.isEmpty())
+            focusErrorField(key);
+    };
+    connect(statusDetailsTable, &QTableWidget::cellClicked, this, activateStatusRow);
+    connect(statusDetailsTable, &QTableWidget::cellActivated, this, activateStatusRow);
+    connect(statusDetailsTable->horizontalHeader(), &QHeaderView::sectionResized, this, &Window::updateStatusDetails,
+            Qt::QueuedConnection);
     statusBar()->setSizeGripEnabled(false);
     statusBar()->addPermanentWidget(controller);
     statusBar()->addPermanentWidget(exportButton);
     windowGrip = new ResizeGrip(this);
     windowGrip->setObjectName("windowResizeGrip");
     statusBar()->setContentsMargins(0, 0, windowGrip->width(), 0);
-    connect(status, &QPushButton::clicked, this,
-            [this]
-            {
-                if (errors.isEmpty())
-                    return;
-                const auto key = errors.first().field;
-                for (const auto& d : dimensions())
-                    if (key == d.nominal || key == d.lower || key == d.upper)
-                    {
-                        selectPage(0);
-                        part->focusField(key);
-                        return;
-                    }
-                selectPage(1);
-                process->focusField(key);
-            });
     connect(group, &QButtonGroup::idClicked, this,
             [this](int index)
             {
@@ -337,7 +456,12 @@ void Window::editValue(const QString& key, const QString& text)
         if (key == dimension.lower || key == dimension.upper)
             working.set(dimension.designation, "");
     const auto expected = schema()["defaults"].toObject().value(key);
-    if (expected.isString())
+    if (expected.isBool())
+    {
+        working.set(key, text == "true");
+        invalidDraft.remove(key);
+    }
+    else if (expected.isString())
     {
         working.set(key, text);
         invalidDraft.remove(key);
@@ -429,27 +553,133 @@ void Window::showErrors(const QVector<Error>& value)
     errors = value;
     part->setErrors(errors);
     process->setErrors(errors);
-    status->setText(errors.isEmpty() ? QString() : errors.first().message);
-    status->setToolTip(errors.isEmpty() ? QString() : errors.first().message);
-    status->setStyleSheet(
-        QString("QPushButton { border:none; background:transparent; text-align:left; padding:2px 8px; color:%1; }")
-            .arg(dark() ? "#e69e9e" : "#a34343"));
+    setStatusMessage(errors.isEmpty() ? QString() : errors.first().message, !errors.isEmpty(), errors);
+}
+void Window::setStatusMessage(const QString& message, bool error, const QVector<Error>& entries)
+{
+    statusError = error;
+    statusEntries = entries;
+    if (statusEntries.isEmpty() && !message.isEmpty())
+        statusEntries.append(Error{{}, message});
+    status->setText(message);
+    status->setToolTip(message);
+    status->setProperty("error", error);
+    status->style()->unpolish(status);
+    status->style()->polish(status);
+    if (message.isEmpty())
+    {
+        const QSignalBlocker blocker(statusToggle);
+        statusToggle->setChecked(false);
+    }
+    updateStatusDetails();
+}
+void Window::updateStatusDetails()
+{
+    if (!statusDetails || updatingStatusDetails)
+        return;
+    QScopedValueRollback updating(updatingStatusDetails, true);
+    const bool expanded = statusToggle->isChecked() && !status->text().isEmpty();
+    status->setVisible(!statusError);
+    auto layout = qobject_cast<QHBoxLayout*>(status->parentWidget()->layout());
+    layout->setStretch(1, statusError ? 0 : 1);
+    layout->setStretch(2, statusError ? 1 : 0);
+    statusToggle->setVisible(
+        !status->text().isEmpty() &&
+        (statusError || expanded || status->fontMetrics().horizontalAdvance(status->text()) > status->width() - 16));
+    statusToggle->setProperty("errorCount", statusError ? statusEntries.size() : 0);
+    statusToggle->setText(statusError ? QString::number(statusEntries.size()) : QString());
+    statusToggle->setArrowType(statusError ? Qt::NoArrow : expanded ? Qt::DownArrow : Qt::UpArrow);
+    statusToggle->setIcon(statusError ? errorIcon() : QIcon());
+    const auto action =
+        statusError ? QString("Ошибки: %1. %2 список").arg(statusEntries.size()).arg(expanded ? "Свернуть" : "Открыть")
+        : expanded  ? QString("Свернуть сообщение")
+                    : QString("Развернуть сообщение");
+    statusToggle->setAccessibleName(action);
+    statusToggle->setToolTip(action);
+    statusDetailsTitle->setText(statusError ? QString("Ошибки: %1").arg(statusEntries.size()) : QString("Сообщение"));
+    statusDetailsTable->setColumnHidden(0, !statusError);
+    statusDetailsTable->setRowCount(statusEntries.size());
+    for (int row = 0; row < statusEntries.size(); ++row)
+    {
+        const auto& entry = statusEntries[row];
+        auto message = entry.message;
+        QString label;
+        for (const auto& f : fields())
+            if (f.key == entry.field)
+                label = f.label;
+        for (const auto& item : schema()["cardFields"].toArray())
+            if (item.toObject()["key"].toString() == entry.field)
+                label = item.toObject()["label"].toString();
+        if (!label.isEmpty() && !entry.message.startsWith(label))
+            message = label + ": " + message;
+        for (int column = 0; column < 2; ++column)
+        {
+            auto item = statusDetailsTable->item(row, column);
+            if (!item)
+            {
+                item = new QTableWidgetItem;
+                item->setTextAlignment((column == 0 ? Qt::AlignHCenter : Qt::AlignLeft) | Qt::AlignTop);
+                statusDetailsTable->setItem(row, column, item);
+            }
+            const auto text = column == 0 ? QString::number(row + 1) : message;
+            if (item->text() != text)
+                item->setText(text);
+            item->setToolTip(message);
+        }
+    }
+    statusDetails->setVisible(expanded);
+    if (!expanded)
+        return;
+    const auto area = centralWidget()->rect().adjusted(8, 8, -8, -8);
+    const int width = std::min(800, area.width());
+    statusDetails->resize(width, statusDetails->height());
+    statusDetails->layout()->activate();
+    statusDetailsTable->resizeRowsToContents();
+    const int contentHeight =
+        statusDetailsTitle->sizeHint().height() + statusDetailsTable->verticalHeader()->length() + 26;
+    const int height = std::min(contentHeight, std::max(1, area.height() / 2));
+    statusDetails->setGeometry(area.left(), area.bottom() - height + 1, width, height);
+    statusDetails->raise();
+}
+QVector<Error> Window::currentErrors() const
+{
+    QVector<Error> value;
+    for (auto i = invalidDraft.cbegin(); i != invalidDraft.cend(); ++i)
+        value.append({i.key(), i.value().message});
+    for (const auto& error : validate(working))
+        if (!invalidDraft.contains(error.field))
+            value.append(error);
+    return value;
+}
+void Window::focusErrorField(const QString& key)
+{
+    if (key == "nc")
+    {
+        selectPage(2);
+        inspection->table->setFocus();
+        return;
+    }
+    if (key == "controller")
+    {
+        controller->setFocus();
+        return;
+    }
+    for (const auto& d : dimensions())
+        if (key == d.nominal || key == d.lower || key == d.upper)
+        {
+            selectPage(0);
+            part->focusField(key);
+            return;
+        }
+    selectPage(1);
+    process->focusField(key);
 }
 void Window::schedule()
 {
     ++revision;
     project.reset();
     inspection->setPending();
-    if (!invalidDraft.isEmpty())
-    {
-        QVector<Error> invalid;
-        for (auto i = invalidDraft.begin(); i != invalidDraft.end(); ++i)
-            invalid.append({i.key(), i.value().message});
-        showErrors(invalid);
-        generationTimer.stop();
-        return;
-    }
-    const auto invalid = validate(working);
+    const auto invalid = currentErrors();
     showErrors(invalid);
     if (!invalid.isEmpty())
     {
@@ -499,7 +729,7 @@ bool Window::saveProject(const QString& path)
     }
     catch (const std::exception& e)
     {
-        status->setText(QString::fromUtf8(e.what()));
+        setStatusMessage(QString::fromUtf8(e.what()), true);
         return false;
     }
 }
@@ -513,7 +743,7 @@ bool Window::openProject(const QString& path)
     }
     catch (const std::exception& e)
     {
-        status->setText(QString::fromUtf8(e.what()));
+        setStatusMessage(QString::fromUtf8(e.what()), true);
         return false;
     }
 }
@@ -524,12 +754,13 @@ bool Window::exportTo(const QString& folder)
     try
     {
         exportedFiles = exportProject(*project, folder);
-        status->setText("Комплект сохранён");
+        QSettings().setValue("files/exportDirectory", QFileInfo(folder).absoluteFilePath());
+        setStatusMessage("Комплект сохранён");
         return true;
     }
     catch (const std::exception& e)
     {
-        status->setText(QString::fromUtf8(e.what()));
+        setStatusMessage(QString::fromUtf8(e.what()), true);
         return false;
     }
 }
@@ -560,9 +791,14 @@ bool Window::ensureReady()
 {
     if (isReady())
         return true;
-    if (interactiveDrag || !invalidDraft.isEmpty())
+    if (!invalidDraft.isEmpty())
     {
-        status->setText("Завершите ввод параметров.");
+        showErrors(currentErrors());
+        return false;
+    }
+    if (interactiveDrag)
+    {
+        setStatusMessage("Завершите ввод параметров.", true);
         return false;
     }
     generationTimer.stop();
@@ -586,20 +822,29 @@ void Window::exportDialog()
         explainFailure();
         return;
     }
+    auto folder = QSettings().value("files/exportDirectory").toString();
+    if (folder.isEmpty() || !QDir(folder).exists())
+    {
+        if (!chooseExportDirectory())
+            return;
+        folder = QSettings().value("files/exportDirectory").toString();
+    }
+    if (exportTo(folder))
+        showExportResult();
+    else
+        explainFailure();
+}
+bool Window::chooseExportDirectory()
+{
     const auto folder = QFileDialog::getExistingDirectory(
-        this, "Сохранить комплект документов",
+        this, "Папка для комплектов — каждый выпуск в отдельной подпапке",
         QSettings()
             .value("files/exportDirectory", QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation))
             .toString());
     if (folder.isEmpty())
-        return;
-    if (exportTo(folder))
-    {
-        QSettings().setValue("files/exportDirectory", folder);
-        showExportResult();
-    }
-    else
-        explainFailure();
+        return false;
+    QSettings().setValue("files/exportDirectory", folder);
+    return true;
 }
 void Window::showExportResult()
 {
@@ -668,6 +913,7 @@ void Window::resizeEvent(QResizeEvent* e)
         windowGrip->raise();
         statusBar()->setContentsMargins(0, 0, isMaximized() || isFullScreen() ? 0 : windowGrip->width(), 0);
     }
+    updateStatusDetails();
 }
 void Window::closeEvent(QCloseEvent* e)
 {
@@ -681,14 +927,109 @@ void Window::closeEvent(QCloseEvent* e)
 }
 bool Window::eventFilter(QObject* object, QEvent* e)
 {
+    if ((object == status || object == centralWidget()) &&
+        (e->type() == QEvent::Resize || e->type() == QEvent::FontChange || e->type() == QEvent::PaletteChange))
+        updateStatusDetails();
+    if (object == statusDetailsTable && e->type() == QEvent::KeyPress &&
+        static_cast<QKeyEvent*>(e)->matches(QKeySequence::Copy))
+    {
+        QStringList messages;
+        for (int row = 0; row < statusDetailsTable->rowCount(); ++row)
+            if (statusDetailsTable->selectionModel()->isRowSelected(row))
+                messages.append((statusError ? QString::number(row + 1) + "\t" : QString()) +
+                                statusDetailsTable->item(row, 1)->text());
+        if (!messages.isEmpty())
+            QApplication::clipboard()->setText(messages.join('\n'));
+        return true;
+    }
+    if ((object == statusToggle || object == statusDetailsTable) && e->type() == QEvent::KeyPress &&
+        static_cast<QKeyEvent*>(e)->key() == Qt::Key_Escape && statusToggle->isChecked())
+    {
+        statusToggle->setChecked(false);
+        statusToggle->setFocus();
+        return true;
+    }
+    if (e->type() == QEvent::MouseButtonPress && object->objectName() == "mainToolbar" &&
+        static_cast<QMouseEvent*>(e)->button() == Qt::LeftButton)
+    {
+        pageButtons[pages->currentIndex()]->setFocus(Qt::MouseFocusReason);
+        return true;
+    }
     if (e->type() == QEvent::KeyPress)
     {
         const auto key = static_cast<QKeyEvent*>(e)->key();
+        const auto fileButton = findChild<QToolButton*>("fileMenuButton");
+        const auto fileMenu = fileButton->menu();
+        if (const auto menu = qobject_cast<QMenu*>(object))
+        {
+            if (key == Qt::Key_Left || key == Qt::Key_Escape)
+            {
+                menu->close();
+                if (menu == fileMenu)
+                    fileButton->setFocus(Qt::OtherFocusReason);
+                else if (const auto parent = qobject_cast<QMenu*>(menu->parentWidget()))
+                {
+                    parent->setFocus(Qt::OtherFocusReason);
+                }
+                return true;
+            }
+            const auto action = menu->activeAction();
+            if ((key == Qt::Key_Right || key == Qt::Key_Return || key == Qt::Key_Enter) && action &&
+                action->isEnabled() && !action->isSeparator())
+            {
+                if (const auto submenu = action->menu())
+                {
+                    submenu->popup(menu->mapToGlobal(menu->actionGeometry(action).topRight()));
+                    auto actions = submenu->actions();
+                    actions.removeIf([](QAction* item)
+                                     { return item->isSeparator() || !item->isEnabled() || !item->isVisible(); });
+                    auto selected =
+                        std::find_if(actions.begin(), actions.end(), [](QAction* item) { return item->isChecked(); });
+                    if (selected != actions.end())
+                        submenu->setActiveAction(*selected);
+                    else if (!actions.isEmpty())
+                        submenu->setActiveAction(actions.first());
+                    submenu->setFocus(Qt::OtherFocusReason);
+                }
+                else
+                {
+                    menu->close();
+                    fileMenu->close();
+                    fileButton->setFocus(Qt::OtherFocusReason);
+                    action->trigger();
+                }
+                return true;
+            }
+        }
+        if (object == fileButton && key == Qt::Key_Left)
+            return true;
+        if (object == fileButton && key == Qt::Key_Right)
+        {
+            pageButtons[0]->setFocus();
+            return true;
+        }
+        if (object == fileButton &&
+            (key == Qt::Key_Up || key == Qt::Key_Down || key == Qt::Key_Return || key == Qt::Key_Enter))
+        {
+            auto actions = fileMenu->actions();
+            actions.removeIf([](QAction* item)
+                             { return item->isSeparator() || !item->isEnabled() || !item->isVisible(); });
+            const auto selected = actions.isEmpty() ? nullptr : key == Qt::Key_Up ? actions.last() : actions.first();
+            fileMenu->popup(fileButton->mapToGlobal(QPoint(0, fileButton->height())));
+            fileMenu->setActiveAction(selected);
+            fileMenu->setFocus(Qt::OtherFocusReason);
+            return true;
+        }
         const auto index = pageButtons.indexOf(qobject_cast<QToolButton*>(object));
         if (index >= 0)
         {
             if (key == Qt::Key_Left || key == Qt::Key_Right)
             {
+                if (index == 0 && key == Qt::Key_Left)
+                {
+                    fileButton->setFocus();
+                    return true;
+                }
                 const auto next = std::clamp(static_cast<int>(index) + (key == Qt::Key_Right ? 1 : -1), 0, 2);
                 selectPage(next);
                 pageButtons[next]->setFocus();

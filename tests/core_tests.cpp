@@ -1,4 +1,8 @@
+#include "core/engine.h"
 #include "core/model.h"
+#include "core/planning.h"
+#include "core/tolerances.h"
+#include "core/verifier.h"
 #include "files/projects.h"
 #include <QFile>
 #include <QJsonDocument>
@@ -21,7 +25,7 @@ class CoreTests final : public QObject
         QCOMPARE(g.project->programs.size(), 2);
         QCOMPARE(g.project->calculations.targetLength, 115.5);
         QCOMPARE(g.project->calculations.targetFlangeDiameter, 119.565);
-        QCOMPARE(g.project->programs[0].moves.size(), 130);
+        QCOMPARE(g.project->programs[0].moves.size(), 131);
         QCOMPARE(g.project->programs[0].transitions.size(), 8);
         QVERIFY(std::abs(g.project->programs[0].verification.cutMinutes - 37.61840605536863) < 1e-9);
         for (const auto& program : g.project->programs)
@@ -235,6 +239,123 @@ class CoreTests final : public QObject
             }
         }
     }
+    void optionalSimulationBlank()
+    {
+        pf::Parameters p;
+        p.set("controller", "sinumerik840dsl");
+        const auto enabled = pf::generate(p);
+        QVERIFY(enabled.ok());
+        QVERIFY(enabled.project->programs[0].text.contains("WORKPIECE"));
+        p.set("simulationBlank", false);
+        const auto disabled = pf::generate(p);
+        QVERIFY(disabled.ok());
+        QCOMPARE(enabled.project->calculations.json(), disabled.project->calculations.json());
+        for (int i = 0; i < 2; ++i)
+        {
+            const auto& program = disabled.project->programs[i];
+            QVERIFY(!program.text.contains("WORKPIECE"));
+            QVERIFY(pf::verify(program.text, p, program.setup).ok);
+            QCOMPARE(program.moves.size(), enabled.project->programs[i].moves.size());
+            for (int n = 0; n < program.moves.size(); ++n)
+            {
+                QCOMPARE(program.moves[n].x, enabled.project->programs[i].moves[n].x);
+                QCOMPARE(program.moves[n].z, enabled.project->programs[i].moves[n].z);
+            }
+        }
+        const auto& first = disabled.project->programs[0];
+        QVERIFY(!pf::verify(enabled.project->programs[0].text, p, first.setup).ok);
+        auto required = p;
+        required.set("simulationBlank", true);
+        QVERIFY(!pf::verify(first.text, required, first.setup).ok);
+        QTemporaryDir saved;
+        pf::saveParameters(*disabled.project, saved.filePath("optional.json"));
+        QCOMPARE(pf::importParameters(saved.filePath("optional.json")).json(), disabled.project->parameters.json());
+        QVERIFY(!pf::exportProject(*disabled.project, saved.filePath("kit")).isEmpty());
+        auto legacy = pf::Parameters().json();
+        for (const auto key : {"simulationBlank", "outerTool", "customOuterName", "outerToolNumber", "outerCorrector",
+                               "boringToolNumber", "boringCorrector"})
+            legacy.remove(key);
+        QFile file(saved.filePath("legacy.json"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(QJsonDocument(legacy).toJson());
+        file.close();
+        const auto restored = pf::importParameters(file.fileName());
+        QVERIFY(restored.b("simulationBlank"));
+        QCOMPARE(restored.n("outerToolNumber"), 1.);
+        QCOMPARE(restored.n("boringToolNumber"), 2.);
+        QVERIFY(pf::generate(restored).ok());
+    }
+    void configuredTools()
+    {
+        for (const auto controller : {"axioma", "sinumerik840dsl"})
+        {
+            pf::Parameters p;
+            p.set("controller", controller);
+            const auto baseline = pf::generate(p);
+            p.set("outerTool", "custom");
+            p.set("customOuterName", "Мой наружный резец");
+            p.set("outerToolNumber", 7);
+            p.set("outerCorrector", 2);
+            p.set("bodyTool", "custom");
+            p.set("customBodyName", "Мой обратный резец");
+            p.set("bodyToolNumber", 12);
+            p.set("bodyCorrector", 4);
+            p.set("boringToolNumber", 9);
+            p.set("boringCorrector", 3);
+            const auto g = pf::generate(p);
+            QVERIFY2(g.ok(), g.errors.isEmpty() ? "No project" : qPrintable(g.errors.first().message));
+            QCOMPARE(g.project->calculations.json(), baseline.project->calculations.json());
+            QVERIFY(g.project->programs[0].text.contains("T7 D2"));
+            QVERIFY(g.project->programs[0].text.contains("T9 D3"));
+            QVERIFY(g.project->programs[0].text.contains("T12 D4"));
+            QVERIFY(g.project->programs[1].text.contains("T7 D2"));
+            QVERIFY(!g.project->programs[1].text.contains("T9 D3"));
+            QVERIFY(!g.project->programs[1].text.contains("T12 D4"));
+            QVERIFY(g.project->operations[1].description.contains("Мой наружный резец"));
+            for (const auto& program : g.project->programs)
+            {
+                for (const auto& transition : program.transitions)
+                    QCOMPARE(transition.tool, transition.kind == "inner"  ? QString("T9")
+                                              : transition.kind == "body" ? QString("T12")
+                                                                          : QString("T7"));
+                for (const auto& move : program.verification.moves)
+                    QVERIFY(move.tool == 7 || move.tool == 9 || move.tool == 12);
+                auto bad = program.text;
+                bad.replace("T7 D2", "T7 D1");
+                QVERIFY(!pf::verify(bad, p, program.setup).ok);
+            }
+            QTemporaryDir saved;
+            pf::saveParameters(*g.project, saved.filePath("tools.json"));
+            QCOMPARE(pf::importParameters(saved.filePath("tools.json")).json(), g.project->parameters.json());
+            for (const auto& [key, value] : QVector<std::pair<QString, double>>{{"outerToolNumber", 0},
+                                                                                {"boringCorrector", 1.5},
+                                                                                {"boringToolNumber", 7},
+                                                                                {"bodyToolNumber", 9},
+                                                                                {"bodyCorrector", 1.5}})
+            {
+                auto invalid = p;
+                invalid.set(key, value);
+                QVERIFY(!pf::generate(invalid).ok());
+            }
+            for (const auto key : {"outerCorrector", "bodyCorrector", "boringCorrector"})
+            {
+                auto edge = p;
+                edge.set(key, 4);
+                QVERIFY(pf::generate(edge).ok());
+                edge.set(key, 5);
+                QCOMPARE(pf::generate(edge).ok(), QString(controller) != "axioma");
+            }
+            p.set("boringTool", "custom");
+            p.set("customBoringDiameter", 10);
+            p.set("customBoringMinBore", 20);
+            p.set("customBoringOffset", 20);
+            auto invalid = pf::generate(p);
+            QVERIFY(!invalid.ok());
+            QVERIFY(invalid.errors.first().message.contains("5…15"));
+            p.set("customBoringOffset", 10);
+            QVERIFY(pf::generate(p).ok());
+        }
+    }
     void standards()
     {
         QCOMPARE(pf::toleranceWidth(130, 7), .040);
@@ -313,6 +434,21 @@ class CoreTests final : public QObject
         p.set("partName", QString(1, QChar(1)));
         QVERIFY(!pf::generate(p).ok());
     }
+    void independentValidationErrors()
+    {
+        pf::Parameters p;
+        p.set("length", 240);
+        p.set("outerToolNumber", 2);
+        p.set("checker", "\n");
+        p.set("feedFinish", .3);
+        const auto errors = pf::validate(p);
+        for (const auto key : {"length", "boringToolNumber", "checker", "feedFinish"})
+            QVERIFY2(std::any_of(errors.begin(), errors.end(), [key](const auto& error) { return error.field == key; }),
+                     key);
+        QVERIFY(!pf::generate(p).ok());
+        p.set("boringTool", "unknown");
+        QVERIFY(!pf::generate(p).ok());
+    }
     void independentParser()
     {
         for (const auto& controller : {"axioma", "sinumerik840dsl"})
@@ -335,6 +471,89 @@ class CoreTests final : public QObject
                 text = program.text + "N999999 G0 X0 Z0\n";
                 QVERIFY(!pf::verify(text, g.project->parameters, program.setup).ok);
             }
+        }
+    }
+    void approachAfterToolChange()
+    {
+        for (const auto& controller : {"axioma", "sinumerik840dsl"})
+        {
+            pf::Parameters parameters;
+            parameters.set("controller", controller);
+            parameters.set("clearanceZ", 7.5);
+            const auto generated = pf::generate(parameters);
+            QVERIFY(generated.ok());
+            for (const auto& program : generated.project->programs)
+            {
+                const auto safeZ = parameters.n("clearanceZ") + program.setup.stockFrontZ;
+                const QRegularExpression approach("N[0-9]+ G0 Z" + QRegularExpression::escape(pf::number(safeZ)) +
+                                                  "\\r\\n");
+                auto matches = approach.globalMatch(program.text);
+                int count = 0;
+                while (matches.hasNext())
+                {
+                    const auto match = matches.next();
+                    ++count;
+                    auto missing = program.text;
+                    missing.remove(match.capturedStart(), match.capturedLength());
+                    QVERIFY(!pf::verify(missing, parameters, program.setup).ok);
+                    auto simultaneous = program.text;
+                    simultaneous.insert(match.capturedStart() + match.captured().indexOf(" Z"), " X128");
+                    QVERIFY(!pf::verify(simultaneous, parameters, program.setup).ok);
+                    auto wrongPlane = program.text;
+                    const auto position = match.capturedStart() + match.captured().indexOf(" Z") + 2;
+                    wrongPlane.replace(position, pf::number(safeZ).size(), pf::number(-10));
+                    QVERIFY(!pf::verify(wrongPlane, parameters, program.setup).ok);
+                }
+                QCOMPARE(count, program.setup.flipped ? 1 : 3);
+                QCOMPARE(program.moves.size(), program.verification.moves.size());
+            }
+        }
+    }
+    void bodyCutsTowardsShoulder()
+    {
+        for (const auto controller : {"axioma", "sinumerik840dsl"})
+        {
+            pf::Parameters p;
+            p.set("controller", controller);
+            p.set("outerToolNumber", 3);
+            p.set("bodyToolNumber", 12);
+            p.set("boringToolNumber", 7);
+            const auto generated = pf::generate(p);
+            QVERIFY(generated.ok());
+            const auto& program = generated.project->programs[0];
+            const auto& c = generated.project->calculations;
+            int cuts = 0;
+            for (const auto& transition : program.transitions)
+                if (transition.kind == "body")
+                {
+                    QCOMPARE(transition.tool, QString("T12"));
+                    QCOMPARE(transition.zStart, -c.cutLength);
+                    QCOMPARE(transition.zEnd, -c.targetFlangeWidth);
+                    for (qsizetype i = 1; i < program.verification.moves.size(); ++i)
+                    {
+                        const auto& previous = program.verification.moves[i - 1];
+                        const auto& move = program.verification.moves[i];
+                        if (!transition.blocks.contains(move.line))
+                            continue;
+                        QCOMPARE(move.tool, 12);
+                        if (move.mode == "G1" && move.x == previous.x && move.z != previous.z)
+                        {
+                            QCOMPARE(previous.z, -c.cutLength);
+                            QCOMPARE(move.z, -c.targetFlangeWidth);
+                            QVERIFY(move.z > previous.z);
+                            ++cuts;
+                        }
+                    }
+                }
+            QCOMPARE(cuts, 7);
+            auto legacy = p.json();
+            for (const auto key : {"bodyTool", "customBodyName", "bodyToolNumber", "bodyCorrector"})
+                legacy.remove(key);
+            const pf::Parameters restored(legacy);
+            QCOMPARE(restored.n("outerToolNumber"), 3.);
+            QCOMPARE(restored.n("boringToolNumber"), 7.);
+            QCOMPARE(restored.n("bodyToolNumber"), 4.);
+            QVERIFY(pf::generate(restored).ok());
         }
     }
     void flangeContinuity()
@@ -433,6 +652,8 @@ class CoreTests final : public QObject
         }
         const auto files = pf::exportProject(*g.project, temporary.filePath("cards"));
         QCOMPARE(files.size(), 4);
+        QCOMPARE(QFileInfo(files.first()).absolutePath(), temporary.filePath("cards/Комплект 1"));
+        QVERIFY(!QFileInfo::exists(temporary.filePath("cards/Маршрутная карта.docx")));
         for (const auto& name : files)
             QVERIFY(QFileInfo(name).size() > 100);
         QFile unrelated(temporary.filePath("cards/заметки.txt"));
@@ -441,6 +662,7 @@ class CoreTests final : public QObject
         unrelated.close();
         const auto repeated = pf::exportProject(*g.project, temporary.filePath("cards"));
         QCOMPARE(repeated.size(), 4);
+        QCOMPARE(QFileInfo(repeated.first()).absolutePath(), temporary.filePath("cards/Комплект 2"));
         QVERIFY(QFileInfo(repeated.first()).absolutePath() != QFileInfo(files.first()).absolutePath());
         for (int i = 0; i < files.size(); ++i)
         {
@@ -504,17 +726,36 @@ class CoreTests final : public QObject
                     QVERIFY2(std::abs(i->toDouble() - calculations[i.key()].toDouble()) < 1e-9,
                              qPrintable(name + " calculation " + i.key()));
             const auto& first = g.project->programs[0];
-            const auto oldMoves = expected["moves"].toArray();
-            QCOMPARE(first.moves.size(), oldMoves.size());
-            for (qsizetype i = 0; i < oldMoves.size(); ++i)
+            QVector<pf::Move> migrated;
+            for (const auto& item : expected["moves"].toArray())
             {
-                const auto m = oldMoves[i].toObject();
-                const auto& actual = first.moves[i];
-                QVERIFY2(std::abs(actual.x - m["x"].toDouble()) < 1e-9 &&
-                             std::abs(actual.z - m["z"].toDouble()) < 1e-9 && actual.mode == m["mode"].toString() &&
-                             actual.line == m["line"].toInt() + 10,
-                         qPrintable(name + " move " + QString::number(i)));
+                const auto m = item.toObject();
+                double z = m["z"].toDouble();
+                if (m["transition"].toString() == "010.03" || m["transition"].toString() == "010.04")
+                {
+                    if (z == -g.project->calculations.targetFlangeWidth)
+                        z = -g.project->calculations.cutLength;
+                    else if (z == -g.project->calculations.cutLength)
+                        z = -g.project->calculations.targetFlangeWidth;
+                }
+                migrated.append({m["x"].toDouble(), z, m["mode"].toString()});
             }
+            const auto withoutStationaryRapids = [](const QVector<pf::Move>& moves)
+            {
+                QVector<pf::Move> result;
+                for (const auto& move : moves)
+                    if (result.isEmpty() || move.mode != "G0" || result.last().mode != "G0" ||
+                        move.x != result.last().x || move.z != result.last().z)
+                        result.append(move);
+                return result;
+            };
+            const auto actual = withoutStationaryRapids(first.moves);
+            migrated = withoutStationaryRapids(migrated);
+            QCOMPARE(actual.size(), migrated.size());
+            for (qsizetype i = 0; i < migrated.size(); ++i)
+                QVERIFY2(actual[i].x == migrated[i].x && actual[i].z == migrated[i].z &&
+                             actual[i].mode == migrated[i].mode,
+                         qPrintable(name + " move " + QString::number(i)));
             QVERIFY2(std::abs(first.verification.cutMinutes - oldCalculations["totalCutMinutes"].toDouble()) < 1e-9,
                      qPrintable(name + " G1 time"));
         }

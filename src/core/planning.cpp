@@ -1,4 +1,5 @@
-#include "model.h"
+#include "planning.h"
+#include "tooling.h"
 #include <cmath>
 #include <numbers>
 #include <stdexcept>
@@ -61,6 +62,14 @@ class Builder
         emit(InstructionKind::CoolantOff);
         emit(InstructionKind::Stop);
     }
+    void selectTool(const Parameters& p, int role)
+    {
+        const QString prefix = role == 2 ? "boring" : role == 3 ? "body" : "outer";
+        Instruction instruction{InstructionKind::Tool, {}};
+        instruction.tool = static_cast<int>(p.n(prefix + "ToolNumber"));
+        instruction.corrector = static_cast<int>(p.n(prefix + "Corrector"));
+        plan.instructions.append(instruction);
+    }
     void end()
     {
         emit(InstructionKind::FeedPerMinute);
@@ -86,11 +95,11 @@ Plan firstSetup(const Parameters& p, const Calculations& c, const QString& id)
          false},
         {"010.02", "Буртик — чистовое точение", "FLANGE FINISH", "outer", 1, c.targetFlangeDiameter + 2 * allowance,
          c.targetFlangeDiameter, 0, c.targetFlangeWidth, allowance, c.targetFlangeDiameter, true},
-        {"010.03", "Тело — черновое точение", "BODY ROUGH", "body", 1, p.n("stockDiameter"),
-         c.targetBodyDiameter + 2 * allowance, c.targetFlangeWidth, c.cutLength, p.n("depthOutside"),
+        {"010.03", "Тело — черновое точение", "BODY ROUGH", "body", 3, p.n("stockDiameter"),
+         c.targetBodyDiameter + 2 * allowance, c.cutLength, c.targetFlangeWidth, p.n("depthOutside"),
          p.n("stockDiameter"), false},
-        {"010.04", "Тело — чистовое точение", "BODY FINISH", "body", 1, c.targetBodyDiameter + 2 * allowance,
-         c.targetBodyDiameter, c.targetFlangeWidth, c.cutLength, allowance, c.targetBodyDiameter, true},
+        {"010.04", "Тело — чистовое точение", "BODY FINISH", "body", 3, c.targetBodyDiameter + 2 * allowance,
+         c.targetBodyDiameter, c.cutLength, c.targetFlangeWidth, allowance, c.targetBodyDiameter, true},
         {"010.05", "Основное отверстие — черновое растачивание", "BORE ROUGH", "inner", 2, p.n("stockBore"),
          c.targetBoreDiameter - 2 * allowance, 0, c.cutLength, p.n("depthInside"), c.targetBoreDiameter, false},
         {"010.06", "Основное отверстие — чистовое растачивание", "BORE FINISH", "inner", 2,
@@ -106,7 +115,8 @@ Plan firstSetup(const Parameters& p, const Calculations& c, const QString& id)
     b.plan.id = id;
     b.plan.setup = {"010",        "Первый установ",     false,         0, c.jawsFrontZ,
                     c.gripLength, p.n("stockDiameter"), -c.stockLength};
-    b.plan.blank = Plan::Blank{0, -c.stockLength, c.jawsFrontZ, p.n("stockDiameter"), p.n("stockBore")};
+    if (p.b("simulationBlank"))
+        b.plan.blank = Plan::Blank{0, -c.stockLength, c.jawsFrontZ, p.n("stockDiameter"), p.n("stockBore")};
     b.prepare();
     int activeTool = 0;
     for (const auto& d : definitions)
@@ -114,7 +124,7 @@ Plan firstSetup(const Parameters& p, const Calculations& c, const QString& id)
         Transition t;
         t.id = d.id;
         t.title = d.title;
-        t.tool = "T" + QString::number(d.tool);
+        t.tool = "T" + number(p.n(d.tool == 2 ? "boringToolNumber" : d.tool == 3 ? "bodyToolNumber" : "outerToolNumber"));
         t.kind = d.kind;
         t.diameter = roundTo(d.target);
         t.startDiameter = roundTo(d.start);
@@ -134,7 +144,7 @@ Plan firstSetup(const Parameters& p, const Calculations& c, const QString& id)
                 b.emit(InstructionKind::CoolantOff);
                 b.emit(InstructionKind::Stop);
             }
-            b.emit(InstructionKind::Tool, d.tool);
+            b.selectTool(p, d.tool);
             if (d.tool == 2 &&
                 (p.s("boringTool") != "a32t" || p.n("boringOverhang") != 125 || p.n("boringClamp") != 128))
             {
@@ -146,6 +156,8 @@ Plan firstSetup(const Parameters& p, const Calculations& c, const QString& id)
                            QString::number(p.n("boringClamp"), 'f', 3));
             }
             b.emit(InstructionKind::GeometryOffset);
+            // A new offset changes the tip coordinates; clear the face before moving X.
+            b.emit(InstructionKind::ApproachFront, 0, p.n("clearanceZ"));
             b.emit(InstructionKind::CoolantOn);
             activeTool = d.tool;
         }
@@ -196,8 +208,9 @@ Plan secondSetup(const Parameters& p, const Calculations& c, const QString& id)
     const auto insideX = roundTo(c.targetBoreDiameter - 2 * p.n("clearanceX"));
     const auto safeZ = roundTo(p.n("trimAllowance") + p.n("clearanceZ"));
     b.prepare();
-    b.emit(InstructionKind::Tool, 1);
+    b.selectTool(p, 1);
     b.emit(InstructionKind::GeometryOffset);
+    b.emit(InstructionKind::ApproachFront, 0, safeZ);
     b.emit(InstructionKind::CoolantOn);
     const auto allowance = p.n("finishAllowance");
     const auto trimTicks = dimensionTicks(p.n("trimAllowance")), finishTicks = dimensionTicks(allowance);
@@ -211,7 +224,7 @@ Plan secondSetup(const Parameters& p, const Calculations& c, const QString& id)
         Transition t;
         t.id = stage == 0 ? "020.01" : "020.02";
         t.title = stage == 0 ? "Задний торец — черновое торцевание" : "Задний торец — чистовое торцевание";
-        t.tool = "T1";
+        t.tool = "T" + number(p.n("outerToolNumber"));
         t.kind = "face";
         t.diameter = c.targetBodyDiameter;
         t.startDiameter = c.targetBodyDiameter;

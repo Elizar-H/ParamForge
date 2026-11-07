@@ -1,3 +1,4 @@
+#include "core/tooling.h"
 #include "projects.h"
 #include <QBuffer>
 #include <QMap>
@@ -439,9 +440,93 @@ QByteArray routeCard(const Project& project)
     const auto& c = project.calculations;
     const QVector<double> aw = {13, 10.4, 10.4, 10.4, 13, 75.4, 153.4},
                           bw = {13, 119.6, 10.4, 18.2, 10.4, 13, 10.4, 13, 13, 13, 13, 18.2, 20.8};
-    for (int index = 1; index <= 2; ++index)
+    QVector<Table> bodies;
+    Table body;
+    for (const auto& op : project.operations)
     {
-        auto pageData = page("ГОСТ 3.1118-82", index == 1 ? "1" : "1а", index, 2, project, index == 2);
+        Table card;
+        int n = 1;
+        const auto program = op.code == "010"   ? &project.programs[0]
+                             : op.code == "020" ? &project.programs[1]
+                                                : nullptr;
+        columns(card, aw,
+                {"А" + QString::number(n++).rightJustified(2, '0'), "", "", "", op.code, op.title,
+                 program ? "ОК " + op.code + "; УП " + program->name : QString()},
+                8.5, false, 18);
+        columns(card, bw,
+                {"Б" + QString::number(n++).rightJustified(2, '0'),
+                 program ? "Токарный с ЧПУ " +
+                               QString(p.s("controller") == "axioma" ? "AxiOMA Control" : "SINUMERIK 840D sl")
+                 : op.code == "005" ? "Токарный, наладочный режим"
+                                    : "Контрольное место"},
+                8.5, false, 18);
+        if (op.code == "005")
+            textRow(card, n, "О",
+                    "Принять полый полуфабрикат Ø" + localized(p.n("stockDiameter")) + "/Ø" +
+                        localized(p.n("stockBore")) + " × " + localized(c.rawStockLength) +
+                        "; подрезать первый торец на " + localized(p.n("frontFacingAllowance")) + " до " +
+                        localized(c.stockLength) + " мм.");
+        if (op.code == "010")
+        {
+            textRow(card, n, "О",
+                    "Вылет " + localized(c.stockOverhang) + " мм; кулачки Z" + localized(c.jawsFrontZ) +
+                        ". Точить буртик, тело и отверстия до Z" + localized(c.partingFrontZ) + ". УП " +
+                        program->fileName + ".");
+            textRow(card, n, "Т",
+                    "T" + number(p.n("outerToolNumber")) + "/D" + number(p.n("outerCorrector")) + " " +
+                        turningToolName(p) + "; тело к буртику: T" + number(p.n("bodyToolNumber")) + "/D" +
+                        number(p.n("bodyCorrector")) + " " + bodyToolName(p) + "; T" + number(p.n("boringToolNumber")) +
+                        "/D" + number(p.n("boringCorrector")) + " " + boringTool(p).name + "; R0,4. Непрерывная СОЖ.");
+        }
+        if (op.code == "020")
+        {
+            textRow(card, n, "О",
+                    "Отдельно от УП: отрезать в полосе Z" + localized(c.partingFrontZ) + "…" +
+                        localized(c.partingBackZ) + " мм; рез " + localized(c.cutoffWidth) +
+                        " мм, коридор до кулачков " + localized(c.chuckClearance) + " мм.");
+            textRow(card, n, "О",
+                    "Перевернуть деталь. Мягкие кулачки: пояс " + localized(c.secondClampStart) + "…" +
+                        localized(c.secondClampEnd) + " мм от первого торца; упор по первому торцу; карман Ø" +
+                        localized(c.softJawPocketDiameter) + " × " + localized(c.softJawPocketDepth) + " мм.");
+            textRow(card, n, "О",
+                    "G54 Z0 — готовый задний торец; припуск Z+" + localized(p.n("trimAllowance")) + " мм. По УП " +
+                        program->fileName + " подрезать до L=" + localized(c.targetLength) + " мм; снять заусенцы.");
+            textRow(card, n, "Т",
+                    "Отрезка: " + partingToolName(p) + ". Торцевание: T" + number(p.n("outerToolNumber")) + "/D" +
+                        number(p.n("outerCorrector")) + " " + turningToolName(p) + ", R0,4.");
+        }
+        if (op.code == "030")
+        {
+            textRow(card, n, "О",
+                    "Контролировать размеры по отклонениям. h и b — от первого торца вне галтелей R≤0,5 мм.");
+            textRow(card, n, "Т", inspectionTools(p));
+        }
+        if (op.code == "030")
+        {
+            QStringList values;
+            for (const auto& d : dimensions())
+                values.append(deviationText(p, d));
+            textRow(card, n, "О", values.mid(0, 3).join("; ") + " мм.");
+            textRow(card, n, "О", values.mid(3).join("; ") + " мм.");
+            textRow(card, n, "О",
+                    "Цели, мм: D " + localized(c.targetFlangeDiameter) + "; Db " + localized(c.targetBodyDiameter) +
+                        "; d " + localized(c.targetBoreDiameter) + "; d2 " + localized(c.targetCounterboreDiameter) +
+                        "; L " + localized(c.targetLength) + "; h " + localized(c.targetCounterboreDepth) + "; b " +
+                        localized(c.targetFlangeWidth) + ".");
+        }
+        const auto capacity = bodies.isEmpty() ? 14 : 17;
+        if (!body.rows.isEmpty() && body.rows.size() + card.rows.size() > capacity)
+        {
+            bodies.append(std::move(body));
+            body = {};
+        }
+        body.rows.append(card.rows);
+    }
+    if (!body.rows.isEmpty())
+        bodies.append(std::move(body));
+    for (int index = 1; index <= bodies.size(); ++index)
+    {
+        auto pageData = page("ГОСТ 3.1118-82", index == 1 ? "1" : "1а", index, bodies.size(), project, index > 1);
         auto& card = pageData.card;
         if (index == 1)
         {
@@ -465,78 +550,10 @@ QByteArray routeCard(const Project& project)
                  "Тпз", "Тшт."});
         int n = index == 1 ? 3 : 1;
         const auto start = n;
-        for (const auto& op : project.operations)
+        for (auto line : bodies[index - 1].rows)
         {
-            if ((index == 1) != (op.code == "005" || op.code == "010"))
-                continue;
-            const auto program = op.code == "010"   ? &project.programs[0]
-                                 : op.code == "020" ? &project.programs[1]
-                                                    : nullptr;
-            columns(card, aw,
-                    {"А" + QString::number(n++).rightJustified(2, '0'), "", "", "", op.code, op.title,
-                     program ? "ОК " + op.code + "; УП " + program->name : QString()},
-                    8.5, false, 18);
-            columns(card, bw,
-                    {"Б" + QString::number(n++).rightJustified(2, '0'),
-                     program ? "Токарный с ЧПУ " +
-                                   QString(p.s("controller") == "axioma" ? "AxiOMA Control" : "SINUMERIK 840D sl")
-                     : op.code == "005" ? "Токарный, наладочный режим"
-                                        : "Контрольное место"},
-                    8.5, false, 18);
-            if (op.code == "005")
-                textRow(card, n, "О",
-                        "Принять полый полуфабрикат Ø" + localized(p.n("stockDiameter")) + "/Ø" +
-                            localized(p.n("stockBore")) + " × " + localized(c.rawStockLength) +
-                            "; подрезать первый торец на " + localized(p.n("frontFacingAllowance")) + " до " +
-                            localized(c.stockLength) + " мм.");
-            if (op.code == "010")
-            {
-                textRow(card, n, "О",
-                        "Зажим " + localized(c.gripLength) + " мм; кулачки Z" + localized(c.jawsFrontZ) +
-                            ". Точить буртик, тело и отверстия до Z" + localized(c.partingFrontZ) + ". УП " +
-                            program->fileName + ".");
-                textRow(card, n, "Т",
-                        "T1/D1 SCLCR 2525M12; T2/D1 " + boringTool(p).name +
-                            "; CCMT 12 04 04-PF 4425, R0,4. Непрерывная СОЖ.");
-            }
-            if (op.code == "020")
-            {
-                textRow(card, n, "О",
-                        "Отдельно от УП: отрезать в полосе Z" + localized(c.partingFrontZ) + "…" +
-                            localized(c.partingBackZ) + " мм; рез " + localized(c.cutoffWidth) +
-                            " мм, коридор до кулачков " + localized(c.chuckClearance) + " мм.");
-                textRow(card, n, "О",
-                        "Перевернуть деталь. Мягкие кулачки: пояс " + localized(c.secondClampStart) + "…" +
-                            localized(c.secondClampEnd) + " мм от первого торца; упор по первому торцу; карман Ø" +
-                            localized(c.softJawPocketDiameter) + " × " + localized(c.softJawPocketDepth) + " мм.");
-                textRow(card, n, "О",
-                        "G54 Z0 — готовый задний торец; припуск Z+" + localized(p.n("trimAllowance")) + " мм. По УП " +
-                            program->fileName + " подрезать до L=" + localized(c.targetLength) +
-                            " мм; снять заусенцы.");
-                textRow(card, n, "Т",
-                        "Отрезка: " + partingToolName(p) +
-                            ". Торцевание: T1/D1 SCLCR 2525M12, CCMT 12 04 "
-                            "04-PF 4425.");
-            }
-            if (op.code == "030")
-            {
-                textRow(card, n, "О",
-                        "Контролировать размеры по отклонениям. h и b — от первого торца вне галтелей R≤0,5 мм.");
-                textRow(card, n, "Т", inspectionTools(p));
-            }
-        }
-        if (index == 2)
-        {
-            QStringList values;
-            for (const auto& d : dimensions())
-                values.append(deviationText(p, d));
-            textRow(card, n, "О", values.mid(0, 3).join("; ") + " мм.");
-            textRow(card, n, "О", values.mid(3).join("; ") + " мм.");
-            textRow(card, n, "О",
-                    "Цели, мм: D " + localized(c.targetFlangeDiameter) + "; Db " + localized(c.targetBodyDiameter) +
-                        "; d " + localized(c.targetBoreDiameter) + "; d2 " + localized(c.targetCounterboreDiameter) +
-                        "; L " + localized(c.targetLength) + "; h " + localized(c.targetCounterboreDepth) + "; b " +
-                        localized(c.targetFlangeWidth) + ".");
+            line.cells[0].text = line.cells[0].text.left(1) + QString::number(n++).rightJustified(2, '0');
+            card.rows.append(std::move(line));
         }
         while (n - start < (index == 1 ? 14 : 17))
             textRow(card, n, "", "");
@@ -581,7 +598,7 @@ QByteArray technologyCard(const Project& project)
         int n = 1;
         if (pageIndex == 0)
             textRow(card, n, "О",
-                    "Закрепить заготовку на длине " + localized(c.gripLength) + " мм; кулачки Z" +
+                    "Закрепить заготовку с вылетом " + localized(c.stockOverhang) + " мм; кулачки Z" +
                         localized(c.jawsFrontZ) + ". G54 Z0 — подготовленный передний торец; X — диаметр.");
         if (pageIndex == 2)
         {
@@ -607,8 +624,15 @@ QByteArray technologyCard(const Project& project)
             row(card, 8.5,
                 {{13, "О" + QString::number(n++).rightJustified(2, '0'), true}, {234, description}, {18.2}, {20.8}});
             textRow(card, n, "Т",
-                    t.tool + " D1 — " + (t.tool == "T1" ? QString("SCLCR 2525M12") : boringTool(p).name) +
-                        "; CCMT 12 04 04-PF 4425, R0,4.");
+                    t.tool + " D" +
+                        number(p.n(t.kind == "inner"  ? "boringCorrector"
+                                   : t.kind == "body" ? "bodyCorrector"
+                                                      : "outerCorrector")) +
+                        " — " +
+                        (t.kind == "inner"  ? boringTool(p).name
+                         : t.kind == "body" ? bodyToolName(p)
+                                            : turningToolName(p)) +
+                        "; R0,4.");
             double stroke = 0;
             for (qsizetype m = 1; m < program.verification.moves.size(); ++m)
             {
@@ -638,9 +662,10 @@ QByteArray technologyCard(const Project& project)
         if (pageIndex == 1)
         {
             textRow(card, n, "Т",
-                    "T2: BD" + localized(boringTool(p).diameter) + ", DMIN" + localized(boringTool(p).minBore) +
-                        ", вылет " + localized(p.n("boringOverhang")) + " мм, зажим " + localized(p.n("boringClamp")) +
-                        " мм; отвод X" + localized(c.clearIn) + ". T/D отнесены к виртуальной вершине.");
+                    "T" + number(p.n("boringToolNumber")) + ": BD" + localized(boringTool(p).diameter) + ", DMIN" +
+                        localized(boringTool(p).minBore) + ", вылет " + localized(p.n("boringOverhang")) +
+                        " мм, зажим " + localized(p.n("boringClamp")) + " мм; отвод X" + localized(c.clearIn) +
+                        ". T/D отнесены к виртуальной вершине.");
             textRow(card, n, "О",
                     "Галтели R≤0,5 мм. h — от первого торца на плоской части уступа. Контролировать размеры по полям "
                     "допуска, указанным в МК.");
