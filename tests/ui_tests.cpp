@@ -1265,6 +1265,61 @@ class UiTests final : public QObject
         QVERIFY(!w.close());
         QVERIFY(russian);
     }
+    void savePromptPosition()
+    {
+        for (const auto& theme : {QString("light"), QString("dark")})
+        {
+            pf::ui::applyTheme(theme);
+            pf::ui::Window w;
+            QVERIFY(showActive(w));
+            QTRY_VERIFY(w.isReady());
+            w.editValue("feedFinish", "0,09");
+            for (int state = 0; state < 7; ++state)
+            {
+                if (state == 1 || state == 5)
+                    w.showMaximized();
+                else if (state == 3 || state == 6)
+                    w.showMinimized();
+                else
+                    w.showNormal();
+                QApplication::processEvents();
+                for (int trigger = 0; trigger < 2; ++trigger)
+                {
+                    bool inspected = false;
+                    QRect bounds, parentBounds;
+                    QScreen* screen = nullptr;
+                    QTimer::singleShot(100, &w, [&]
+                    {
+                        if (const auto dialog = w.findChild<QMessageBox*>())
+                        {
+                            inspected = dialog->isVisible();
+                            bounds = dialog->frameGeometry();
+                            parentBounds = w.isMinimized() ? w.normalGeometry() : w.frameGeometry();
+                            screen = dialog->screen();
+                            if (!output.isEmpty())
+                                dialog->grab().save(QDir(output).filePath(
+                                    QString("save-prompt-%1-%2-%3.png").arg(theme).arg(state).arg(trigger)));
+                            dialog->reject();
+                        }
+                    });
+                    if (trigger == 0)
+                        QVERIFY(!w.close());
+                    else
+                        w.findChild<QMenu*>("fileMenu")->actions().first()->trigger();
+                    QVERIFY(inspected);
+                    qInfo() << theme << state << trigger << "dialog" << bounds << "parent" << parentBounds;
+                    QCOMPARE(screen, w.screen());
+                    QVERIFY(screen->availableGeometry().contains(bounds));
+                    QVERIFY(QLineF(bounds.center(), parentBounds.center()).length() < 60);
+                    QVERIFY(w.isVisible());
+                    QVERIFY(!w.isMinimized());
+                    QCOMPARE(w.isMaximized(), state == 1 || state == 5 || state == 6);
+                    QCOMPARE(w.parameters().n("feedFinish"), .09);
+                }
+            }
+        }
+        pf::ui::applyTheme("light");
+    }
     void exportFailureFeedback()
     {
         pf::ui::Window w;

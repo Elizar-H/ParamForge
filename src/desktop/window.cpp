@@ -890,6 +890,9 @@ bool Window::confirmSave()
 {
     if (!modified)
         return true;
+    // A minimized native window has off-screen coordinates; restore it before Qt positions the question.
+    if (isMinimized())
+        setWindowState(windowState() & ~Qt::WindowMinimized);
     QMessageBox dialog(QMessageBox::Question, "Сохранить изменения?", "Параметры детали изменены.",
                        QMessageBox::NoButton, this);
     auto save = dialog.addButton("Сохранить", QMessageBox::AcceptRole);
