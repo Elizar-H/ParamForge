@@ -101,7 +101,7 @@ QVector<Error> validate(const Parameters& input)
         return errors + independent;
     try
     {
-        p = toolErrors.isEmpty() ? resolveStock(resolveTolerances(p)) : resolveTolerances(p);
+        p = toolErrors.isEmpty() ? resolveStock(p) : resolveTolerances(p);
     }
     catch (const std::exception& e)
     {
@@ -131,7 +131,7 @@ QVector<Error> validate(const Parameters& input)
         if (hi < lo)
             error(d.upper, "Верхнее отклонение должно быть не меньше нижнего.");
         if (nominal + lo <= 0)
-            error(d.upper, "Нижняя граница размера должна быть положительной.");
+            error(d.lower, "Нижняя граница размера должна быть положительной.");
         const auto t = target(nominal, lo, hi);
         if (hi >= lo && (t < nominal + lo - 1e-10 || t > nominal + hi + 1e-10))
             error(d.upper, "В интервал допуска не попадает цель с точностью 0,001 мм.");
@@ -263,7 +263,7 @@ Generation generate(const Parameters& input)
     if (!result.errors.isEmpty())
         return result;
     Project project;
-    project.parameters = resolveStock(resolveTolerances(input));
+    project.parameters = resolveStock(input);
     project.calculations = calculate(project.parameters);
     project.id =
         "V-" + QString::fromLatin1(

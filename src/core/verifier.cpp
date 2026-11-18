@@ -28,16 +28,6 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
         fail(toolErrors.first().message);
         return finish();
     }
-    if (!setup.flipped && calculate(p).cutLength > p.n("boringOverhang") - 5 + 1e-8)
-    {
-        fail("Глубина обработки превышает доступный вылет расточной оправки.");
-        return finish();
-    }
-    if (!setup.flipped && (p.n("stockBore") < boringTool(p).minBore || calculate(p).clearIn < boringTool(p).minBore))
-    {
-        fail("Отверстие с учётом отвода меньше допустимого для выбранной оправки.");
-        return finish();
-    }
     if (text.trimmed().isEmpty() || text.size() > 1000000)
     {
         fail("Пустая или слишком большая УП.");
@@ -50,15 +40,26 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
             return finish();
         }
     const bool siemens = p.s("controller") == "sinumerik840dsl";
+    const auto c = calculate(p);
+    if (!setup.flipped && c.cutLength > p.n("boringOverhang") - 5 + 1e-8)
+    {
+        fail("Глубина обработки превышает доступный вылет расточной оправки.");
+        return finish();
+    }
+    if (!setup.flipped && (p.n("stockBore") < boringTool(p).minBore || c.clearIn < boringTool(p).minBore))
+    {
+        fail("Отверстие с учётом отвода меньше допустимого для выбранной оправки.");
+        return finish();
+    }
     const auto configuredTool = [&](double t, double d)
     {
         return (t == p.n("outerToolNumber") && d == p.n("outerCorrector")) ||
                (!setup.flipped && t == p.n("bodyToolNumber") && d == p.n("bodyCorrector")) ||
                (!setup.flipped && t == p.n("boringToolNumber") && d == p.n("boringCorrector"));
     };
-    const double maxX = setup.flipped ? calculate(p).targetBodyDiameter + 2 * p.n("clearanceX")
+    const double maxX = setup.flipped ? c.targetBodyDiameter + 2 * p.n("clearanceX")
                                       : p.n("stockDiameter") + 2 * p.n("clearanceX");
-    const double minZ = setup.flipped ? 0 : -calculate(p).cutLength;
+    const double minZ = setup.flipped ? 0 : -c.cutLength;
     const double maxZ = p.n("clearanceZ") + (setup.flipped ? p.n("trimAllowance") : 0);
     const auto lines = QString(text).replace("\r\n", "\n").replace('\r', '\n').split('\n');
     if (lines.size() > 25000)
@@ -71,6 +72,7 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
                                        : QSet<int>{21, 18, 10, 90, 94, 95, 97, 40, 43, 49, 80, 54, 0, 1};
     const QSet<int> allowedM = siemens ? QSet<int>{3, 5, 8, 9, 30} : QSet<int>{3, 5, 6, 8, 9, 30, 66};
     QSet<int> preparation;
+    QVector<int> cuttingTools;
     int lastN = -1, tool = 0, corrector = 0, feedMode = 0;
     std::optional<double> rpm, feed, xState, zState;
     bool spindle = false, coolant = false, coolantOff = false, stopped = false, ended = false, header = false,
@@ -119,7 +121,6 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
             {
                 valid = args[0].trimmed().isEmpty() && args[1].trimmed().isEmpty() && args[2].trimmed().isEmpty() &&
                         args[3].trimmed().toUpper() == "\"PIPE\"" && args[4].trimmed() == "448";
-                const auto c = calculate(p);
                 const QVector<double> expected = {0, -c.stockLength, c.jawsFrontZ, p.n("stockDiameter"),
                                                   p.n("stockBore")};
                 for (int arg = 0; arg < expected.size(); ++arg)
@@ -308,7 +309,10 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
             if (spindle || !stopped || feedMode != 94 || coolant || !coolantOff)
                 fail(label + "Смена инструмента требует G94, M9 и M5.");
             if (!configuredTool(words.value('T', 0), words.value('D', 0)))
+            {
                 fail(label + "T/D не соответствуют инструментам в технологии.");
+                continue;
+            }
             tool = static_cast<int>(words.value('T', 0));
             corrector = static_cast<int>(words.value('D', 0));
             compensation = siemens;
@@ -364,6 +368,8 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
                 fail(label + "После смены инструмента сначала требуется отдельный G0 по Z перед торцом.");
             if (mode == "G1")
             {
+                if (cuttingTools.isEmpty() || cuttingTools.last() != tool)
+                    cuttingTools.append(tool);
                 if (!spindle || !coolant || feedMode != 95 || !rpm || !feed || *rpm <= 0 || *feed <= 0 ||
                     !integer(*rpm) || !words.contains('F'))
                     fail(label + "G1 требует M3, M8, G95, целые S > 0 и явную F > 0.");
@@ -388,6 +394,12 @@ Verification verify(const QString& text, const Parameters& p, const Setup& setup
         fail("Нет определения полой заготовки WORKPIECE для 010.");
     if (result.moves.isEmpty())
         fail("Нет поддерживаемых перемещений.");
+    QVector<int> expectedTools{int(p.n("outerToolNumber"))};
+    if (!setup.flipped)
+        expectedTools.append({int(p.n("bodyToolNumber")), int(p.n("boringToolNumber"))});
+    if (cuttingTools != expectedTools)
+        fail(setup.flipped ? "Торцевание 020 должно выполняться заданным наружным резцом."
+                           : "Инструменты рабочих подач 010 должны идти в порядке обработки: буртик, тело, растачивание.");
     if (!ended)
         fail("Нет завершающей команды M30.");
     if (!std::isfinite(result.cutMinutes))

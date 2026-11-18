@@ -420,7 +420,7 @@ void Window::setParameters(const Parameters& p, bool value)
     part->closeDimension(false);
     if (auto focused = QApplication::focusWidget(); focused && isAncestorOf(focused))
         focused->clearFocus();
-    working = resolveStock(resolveTolerances(p));
+    working = resolveStock(p);
     invalidDraft.clear();
     inspection->resetDocument();
     process->setupChoice->setCurrentIndex(0);
@@ -510,7 +510,7 @@ void Window::editValue(const QString& key, const QString& text)
     }
     try
     {
-        working = resolveStock(resolveTolerances(working));
+        working = resolveStock(working);
     }
     catch (const std::exception&)
     {
@@ -527,9 +527,8 @@ void Window::editTolerance(const QString& key, const QString& designation)
     try
     {
         working = setTolerance(working, key, designation);
-        const auto& d = dimension(key);
-        invalidDraft.remove(d.lower);
-        invalidDraft.remove(d.upper);
+        invalidDraft.remove(descriptor.lower);
+        invalidDraft.remove(descriptor.upper);
         modified = true;
         refresh();
         schedule();

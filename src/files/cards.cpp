@@ -1,3 +1,4 @@
+#include "core/operations.h"
 #include "core/tooling.h"
 #include "projects.h"
 #include <QBuffer>
@@ -403,6 +404,10 @@ QString deviationText(const Parameters& p, const Dimension& d)
     return field(d.nominal).label + " " + localized(p.n(d.nominal)) +
            (designation.isEmpty() ? QString() : " " + designation) + " (" + sign(lo) + "/" + sign(hi) + ")";
 }
+bool usesReferenceMaterial(const Parameters& p)
+{
+    return p.s("material").simplified().compare("Сталь 45", Qt::CaseInsensitive) == 0;
+}
 QString inspectionTools(const Parameters& p)
 {
     const auto low = p.n("flangeDiameter") + p.n("flangeLowerDeviation"),
@@ -427,9 +432,10 @@ QString inspectionTools(const Parameters& p)
     }
     const auto caliperMaximum =
         std::max(p.n("length") + p.n("lengthUpperDeviation"), p.n("bodyDiameter") + p.n("bodyUpperDeviation"));
-    const int caliper = caliperMaximum <= 150 ? 150 : caliperMaximum <= 200 ? 200 : 300;
+    const auto rangeEnd = [](double required) { return required <= 150 ? 150 : required <= 200 ? 200 : 300; };
+    const auto depthMaximum = p.n("counterboreDepth") + p.n("counterboreDepthUpperDeviation");
     return "Микрометр " + micrometers.join(" / ") + "; нутромеры " + bores.join(" / ") + "; штангенциркуль 0–" +
-           QString::number(caliper) + "; глубиномер 0–150.";
+           QString::number(rangeEnd(caliperMaximum)) + "; глубиномер 0–" + QString::number(rangeEnd(depthMaximum)) + ".";
 }
 const QVector<double> regimeWidths = {13, 109.2, 18.2, 28.6, 23.4, 13, 15.6, 26, 18.2, 20.8};
 } // namespace
@@ -469,9 +475,8 @@ QByteArray routeCard(const Project& project)
         if (op.code == "010")
         {
             textRow(card, n, "О",
-                    "Вылет " + localized(c.stockOverhang) + " мм; кулачки Z" + localized(c.jawsFrontZ) +
-                        ". Точить буртик, тело и отверстия до Z" + localized(c.partingFrontZ) + ". УП " +
-                        program->fileName + ".");
+                    firstSetupClampingText(c) + " Обработать наружный и внутренний профиль. Граница обработки Z" +
+                        localized(c.partingFrontZ) + " мм. УП " + program->fileName + ".");
             textRow(card, n, "Т",
                     "T" + number(p.n("outerToolNumber")) + "/D" + number(p.n("outerCorrector")) + " " +
                         turningToolName(p) + "; тело к буртику: T" + number(p.n("bodyToolNumber")) + "/D" +
@@ -532,7 +537,8 @@ QByteArray routeCard(const Project& project)
         {
             row(card, 8.5,
                 {{13, "М01", true},
-                 {231.4, "Полый обработанный полуфабрикат / " + p.s("material") + "; ОТ, HB≤197"},
+                 {231.4, "Полый обработанный полуфабрикат / " + p.s("material") +
+                             (usesReferenceMaterial(p) ? "; ОТ, HB≤197" : "")},
                  {41.6}});
             const QVector<double> widths = {13, 33.8, 10.4, 18.2, 15.6, 18.2, 13, 33.8, 54.6, 15.6, 18.2, 41.6};
             columns(
@@ -581,7 +587,8 @@ QByteArray technologyCard(const Project& project)
             columns(card, a,
                     {"Наименование операции", "Материал", "Твердость", "ЕВ", "МД", "Профиль и размеры", "МЗ", "КОИД"});
             columns(card, a,
-                    {"Токарная с ЧПУ, установ " + QString::number(pageIndex == 2 ? 2 : 1), p.s("material"), "≤197 HB",
+                    {"Токарная с ЧПУ, установ " + QString::number(pageIndex == 2 ? 2 : 1), p.s("material"),
+                     usesReferenceMaterial(p) ? "≤197 HB" : "",
                      "", "",
                      "Ø" + localized(pageIndex == 2 ? c.targetBodyDiameter : p.n("stockDiameter")) + " × " +
                          localized(pageIndex == 2 ? c.cutLength : c.stockLength)},
@@ -598,8 +605,7 @@ QByteArray technologyCard(const Project& project)
         int n = 1;
         if (pageIndex == 0)
             textRow(card, n, "О",
-                    "Закрепить заготовку с вылетом " + localized(c.stockOverhang) + " мм; кулачки Z" +
-                        localized(c.jawsFrontZ) + ". G54 Z0 — подготовленный передний торец; X — диаметр.");
+                    firstSetupClampingText(c) + " G54 Z0 — подготовленный передний торец; X — диаметр.");
         if (pageIndex == 2)
         {
             textRow(card, n, "О",
@@ -641,20 +647,9 @@ QByteArray technologyCard(const Project& project)
                 if (b.mode == "G1" && t.blocks.contains(b.line) && a.tool == b.tool)
                     stroke = std::max(stroke, t.kind == "face" ? std::abs(b.x - a.x) / 2 : std::abs(b.z - a.z));
             }
-            double depth = t.actualMaximumDepth();
-            if (t.kind == "face")
-            {
-                depth = 0;
-                double previous = t.zStart;
-                for (auto z : t.passes)
-                {
-                    depth = std::max(depth, previous - z);
-                    previous = z;
-                }
-            }
             columns(card, regimeWidths,
                     {"Р" + QString::number(n++).rightJustified(2, '0'), t.id, t.tool.mid(1),
-                     localized(t.referenceDiameter), localized(stroke), localized(depth),
+                     localized(t.referenceDiameter), localized(stroke), localized(t.actualMaximumDepth()),
                      QString::number(t.passes.size()), localized(t.feed), localized(t.rpm),
                      localized(std::numbers::pi * t.referenceDiameter * t.rpm / 1000)},
                     8.5, false, 18);

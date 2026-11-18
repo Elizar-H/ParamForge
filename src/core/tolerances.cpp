@@ -69,7 +69,7 @@ Parameters resolveTolerances(Parameters p)
 Parameters setTolerance(Parameters p, const QString& key, const QString& designation)
 {
     p.set(dimension(key).designation, designation);
-    return resolveTolerances(p);
+    return resolveStock(p);
 }
 double minimumStockDiameter(const Parameters& parameters)
 {

@@ -144,6 +144,7 @@ class CoreTests final : public QObject
             QCOMPARE(g.project->programs[0].setup.jawsFrontZ, -136.);
             QCOMPARE(g.project->programs[0].setup.gripLength, 40.);
             QVERIFY(g.project->operations[1].description.contains("40 мм"));
+            QVERIFY(g.project->operations[1].description.contains("Вылет после подрезки 136 мм"));
             QTemporaryDir folder;
             pf::saveParameters(*g.project, folder.filePath("stock.json"));
             const auto saved = pf::importParameters(folder.filePath("stock.json"));
@@ -324,6 +325,12 @@ class CoreTests final : public QObject
                 bad.replace("T7 D2", "T7 D1");
                 QVERIFY(!pf::verify(bad, p, program.setup).ok);
             }
+            auto wrongBoringTool = g.project->programs[0].text;
+            wrongBoringTool.replace("T9 D3", "T12 D4");
+            QVERIFY(!pf::verify(wrongBoringTool, p, g.project->programs[0].setup).ok);
+            auto missingDimension = p;
+            missingDimension.set("length", QJsonValue(QJsonValue::Null));
+            QVERIFY(!pf::verify(g.project->programs[0].text, missingDimension, g.project->programs[0].setup).ok);
             QTemporaryDir saved;
             pf::saveParameters(*g.project, saved.filePath("tools.json"));
             QCOMPARE(pf::importParameters(saved.filePath("tools.json")).json(), g.project->parameters.json());
@@ -448,6 +455,15 @@ class CoreTests final : public QObject
         QVERIFY(!pf::generate(p).ok());
         p.set("boringTool", "unknown");
         QVERIFY(!pf::generate(p).ok());
+    }
+    void nonpositiveLowerLimit()
+    {
+        pf::Parameters p;
+        p.set("counterboreDepth", 2);
+        p.set("counterboreDepthLowerDeviation", -2);
+        const auto errors = pf::validate(p);
+        QCOMPARE(errors.size(), 1);
+        QCOMPARE(errors.first().field, QString("counterboreDepthLowerDeviation"));
     }
     void independentParser()
     {
@@ -622,6 +638,8 @@ class CoreTests final : public QObject
         QVERIFY(p.setup.jawsFrontZ < -5);
         const auto& finish = p.transitions.last();
         QCOMPARE(finish.zEnd, 0.);
+        QCOMPARE(p.transitions.first().actualMaximumDepth(), 1.8);
+        QCOMPARE(finish.actualMaximumDepth(), .2);
         bool finished = false;
         for (const auto& move : p.verification.moves)
         {
@@ -727,9 +745,9 @@ class CoreTests final : public QObject
                              qPrintable(name + " calculation " + i.key()));
             const auto& first = g.project->programs[0];
             QVector<pf::Move> migrated;
-            for (const auto& item : expected["moves"].toArray())
+            for (const auto& savedMove : expected["moves"].toArray())
             {
-                const auto m = item.toObject();
+                const auto m = savedMove.toObject();
                 double z = m["z"].toDouble();
                 if (m["transition"].toString() == "010.03" || m["transition"].toString() == "010.04")
                 {
@@ -847,6 +865,8 @@ class CoreTests final : public QObject
         variants.append({"wide-part", p});
         p = pf::Parameters();
         p.set("length", 200);
+        p.set("counterboreDepth", 150);
+        p.set("material", "Сталь 40Х");
         p.set("boringTool", "custom");
         p.set("boringOverhang", 210);
         p.set("customBoringName", QString(35, QChar(0x0428)));
@@ -912,6 +932,18 @@ class CoreTests final : public QObject
                 QVERIFY(landscape);
                 QVERIFY(xml.contains(g.project->id.toUtf8()));
                 QVERIFY(xml.contains("020"));
+                if (variant.first == "default" || variant.first == "manual-stock")
+                    QVERIFY(xml.contains(variant.first == "default" ? "Вылет после подрезки 130,5 мм"
+                                                                    : "Вылет после подрезки 138 мм"));
+                if (variant.first == "custom-tool")
+                {
+                    QVERIFY(xml.contains("Сталь 40Х"));
+                    QVERIFY(!xml.contains("≤197"));
+                    if (bytes == route)
+                        QVERIFY(xml.contains("глубиномер 0–200"));
+                }
+                if (variant.first == "default")
+                    QVERIFY(xml.contains(bytes == route ? "HB≤197" : "≤197 HB"));
                 if (variant.first == "wide-metadata" && bytes == technology)
                     QCOMPARE(fullMaterialRuns, 2);
             }

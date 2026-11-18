@@ -93,7 +93,7 @@ Parameters importParameters(const QString& path)
     const auto errors = validate(p);
     if (!errors.isEmpty())
         fail(errors.first().message);
-    return resolveStock(resolveTolerances(p));
+    return resolveStock(p);
 }
 void saveParameters(const Project& project, const QString& path)
 {

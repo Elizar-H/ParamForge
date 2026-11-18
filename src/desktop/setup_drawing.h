@@ -30,5 +30,5 @@ struct SetupMapping
 SetupMapping drawSetup(QPainter&, const QRectF&, const Parameters&, const Setup&, const QString& highlight = {},
                        bool positiveOnly = false, std::optional<SetupMapping> viewport = {});
 SetupMapping fitSetup(const QRectF&, const Parameters&, const Setup&, bool positiveOnly = false,
-                      bool keepPartOrientation = false);
+                      bool keepPartOrientation = false, const SetupMapping* previous = nullptr);
 } // namespace pf::ui

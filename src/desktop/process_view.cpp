@@ -1,28 +1,25 @@
 #include "process_view.h"
 #include "core/engine.h"
 #include "core/geometry.h"
+#include "core/planning.h"
 #include "core/tooling.h"
-#include "drawing.h"
 #include "numeric_edit.h"
 #include "theme.h"
-#include <QFormLayout>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
-#include <QPainterPath>
+#include <QPainter>
 #include <QScrollArea>
 #include <QSignalBlocker>
-#include <QSplitter>
 #include <QVBoxLayout>
-#include <cmath>
-#include <numbers>
+#include <exception>
 
 namespace pf::ui
 {
 ProcessDiagram::ProcessDiagram(QWidget* parent) : QWidget(parent)
 {
     setObjectName("processDiagram");
-    setMinimumSize(300, 300);
+    setMinimumHeight(300);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }
 void ProcessDiagram::setParameters(const Parameters& p)
@@ -49,41 +46,10 @@ void ProcessDiagram::paintEvent(QPaintEvent*)
     QPainter painter(this);
     painter.fillRect(rect(), paper());
     const auto c = calculate(parameters);
-    const Setup setup = setupIndex == 0 ? Setup{"010",
-                                                "Первый установ",
-                                                false,
-                                                0,
-                                                c.jawsFrontZ,
-                                                c.gripLength,
-                                                parameters.n("stockDiameter"),
-                                                -c.stockLength}
-                                        : Setup{"020",
-                                                "Второй установ",
-                                                true,
-                                                parameters.n("trimAllowance"),
-                                                -c.targetLength + c.secondClampEnd,
-                                                25,
-                                                c.targetBodyDiameter,
-                                                -c.targetLength};
+    const auto setup = setupIndex == 0 ? firstSetupFixture(parameters, c) : secondSetupFixture(parameters, c);
     const auto bounds = QRectF(rect().adjusted(8, 8, -8, -8));
-    if (!viewport)
-        viewport = fitSetup(bounds, parameters, setup, false, true);
-    else
-    {
-        const auto radius = std::max(parameters.n("stockDiameter"), parameters.n("flangeDiameter")) / 2;
-        const auto left = std::min(-c.stockLength - 14, -c.targetLength - parameters.n("trimAllowance") - 12);
-        const auto right = std::max(20., parameters.n("frontFacingAllowance") + 12);
-        viewport->zDirection = setup.flipped ? -1 : 1;
-        viewport->zOffset = setup.flipped ? -c.targetLength : 0;
-        const auto room = std::max(1., std::min(viewport->origin.y() - bounds.top() - SetupTopMargin,
-                                                bounds.bottom() - SetupBottomMargin - viewport->origin.y()));
-        const auto nextScale =
-            std::max(.1, std::min({viewport->scale, (bounds.width() - 170) / (right - left), room / (radius + 15)}));
-        if (nextScale < viewport->scale - 1e-8)
-            viewport->scale = nextScale;
-        viewport->origin.setX(bounds.center().x() - 25 - (left + right) / 2 * viewport->scale);
-    }
-    drawSetup(painter, rect().adjusted(8, 8, -8, -8), parameters, setup, focusedKey, false, viewport);
+    viewport = fitSetup(bounds, parameters, setup, false, true, viewport ? &*viewport : nullptr);
+    drawSetup(painter, bounds, parameters, setup, focusedKey, false, viewport);
 }
 void ProcessDiagram::resizeEvent(QResizeEvent* e)
 {
@@ -98,15 +64,17 @@ ProcessView::ProcessView(QWidget* parent) : QWidget(parent)
     sections = new QListWidget(this);
     sections->setObjectName("processSections");
     sections->addItems({"Подготовка", "Инструмент", "Режимы", "Реквизиты"});
-    sections->setFixedWidth(128);
+    sections->setMinimumWidth(100);
+    sections->setMaximumWidth(128);
     sections->setItemDelegate(new ItemDelegate(sections));
     sections->installEventFilter(this);
-    layout->addWidget(sections);
+    layout->addWidget(sections, 1);
     pages = new QStackedWidget(this);
     pages->setObjectName("processParameters");
     pages->installEventFilter(this);
-    pages->setFixedWidth(320);
-    layout->addWidget(pages);
+    pages->setMinimumWidth(284);
+    pages->setMaximumWidth(320);
+    layout->addWidget(pages, 3);
     const QVector<QStringList> keys = {
         {"stockDiameter", "stockBore", "blankLength", "blankOverhang", "trimAllowance", "frontFacingAllowance"},
         {"outerTool",
@@ -362,7 +330,7 @@ ProcessView::ProcessView(QWidget* parent) : QWidget(parent)
         pages->addWidget(scroll);
     }
     auto preview = new QWidget(this);
-    layout->addWidget(preview, 1);
+    layout->addWidget(preview, 4);
     auto previewLayout = new QVBoxLayout(preview);
     previewLayout->setContentsMargins(10, 10, 10, 10);
     setupChoice = new ChoiceList(preview);
@@ -434,16 +402,15 @@ void ProcessView::setParameters(const Parameters& p)
     {
         boringToolFacts->clear();
     }
-    const auto c = calculate(parameters);
-    secondStock->setText("После отделения и переворота\nДлина " + localized(c.cutLength) +
-                         " мм\nЗадний торец — до длины " + localized(c.targetLength) + " мм");
+    secondStock->setText("После отделения и переворота\nДлина " + localized(sizes.cutLength) +
+                         " мм\nЗадний торец — до длины " + localized(sizes.targetLength) + " мм");
     const QSignalBlocker factsBlocker(secondFixture);
     const int selected = secondFixture->currentRow();
     secondFixture->clear();
     secondFixture->addItems(
-        {"Захват за Ø" + localized(c.targetBodyDiameter) + ", пояс " + localized(c.secondClampStart) + "…" +
-             localized(c.secondClampEnd) + " мм от первого торца",
-         "Карман: Ø" + localized(c.softJawPocketDiameter) + " × " + localized(c.softJawPocketDepth) + " мм",
+        {"Захват за Ø" + localized(sizes.targetBodyDiameter) + ", пояс " + localized(sizes.secondClampStart) + "…" +
+             localized(sizes.secondClampEnd) + " мм от первого торца",
+         "Карман: Ø" + localized(sizes.softJawPocketDiameter) + " × " + localized(sizes.softJawPocketDepth) + " мм",
          "Упор по первому торцу"});
     secondFixture->setCurrentRow(std::max(0, selected));
     updateContext();

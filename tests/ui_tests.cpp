@@ -22,6 +22,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPainter>
 #include <QPainterPath>
 #include <QScreen>
 #include <QScrollArea>
@@ -611,7 +612,17 @@ class UiTests final : public QObject
                 QCOMPARE(controls[i]->font(), fonts[i]);
             }
             if (page == 0)
-                QVERIFY(w.part->canvas->width() > normalCanvas.width());
+            {
+                auto canvas = w.part->canvas;
+                QVERIFY(canvas->width() >= normalCanvas.width());
+                const int withParameters = canvas->width();
+                auto collapse = w.findChild<QToolButton*>("collapseParameters");
+                QVERIFY(collapse);
+                QTest::mouseClick(collapse, Qt::LeftButton);
+                QTRY_VERIFY(canvas->width() > withParameters);
+                QTest::mouseClick(collapse, Qt::LeftButton);
+                QTRY_COMPARE(canvas->width(), withParameters);
+            }
             screenshot(w, QString("layout-%1-maximized").arg(page));
         }
     }
@@ -886,6 +897,26 @@ class UiTests final : public QObject
         QVERIFY(bottom->y() - view->table->geometry().bottom() <= split->handleWidth() + 2);
         screenshot(w, "05-second-setup-light");
     }
+    void gradeUpdatesAutomaticStockReadout()
+    {
+        pf::ui::Window w;
+        auto p = pf::Parameters();
+        p.set("autoStock", true);
+        p.set("boreLowerDeviation", -2);
+        p.set("boreUpperDeviation", -2);
+        w.setParameters(p);
+        QVERIFY(showActive(w));
+        QTRY_VERIFY(w.isReady());
+        auto bore = w.process->findChild<pf::ui::NumericEdit*>("parameter_stockBore");
+        QVERIFY(bore);
+        QCOMPARE(bore->text(), QString("44"));
+        w.part->openDimension("boreDiameter");
+        chooseStandard(w.part->dimensionPane, "H7");
+        QTRY_VERIFY(w.isReady());
+        QCOMPARE(w.currentProject()->parameters.n("stockBore"), 45.);
+        w.selectPage(1);
+        QCOMPARE(bore->text(), QString("45"));
+    }
     void themeAnd3D()
     {
         pf::ui::Window w;
@@ -1037,6 +1068,9 @@ class UiTests final : public QObject
     {
         pf::ui::Window w;
         QVERIFY(showActive(w));
+        auto collapse = w.findChild<QToolButton*>("collapseParameters");
+        QVERIFY(collapse);
+        QTest::mouseClick(collapse, Qt::LeftButton);
         QTest::mouseClick(w.process->resetStock, Qt::LeftButton);
         QTRY_VERIFY(w.isReady());
         w.editValue("length", "110");
@@ -2279,6 +2313,23 @@ class UiTests final : public QObject
                 QVERIFY(QRectF(image.rect()).contains(drawing.parameterLabel));
             }
     }
+    void facingDiagramMatchesAxialPasses()
+    {
+        pf::Parameters p;
+        p.set("trimAllowance", 1);
+        p.set("depthOutside", .31);
+        const auto g = pf::generate(p);
+        QVERIFY(g.ok());
+        const auto& program = g.project->programs[1];
+        const auto& levels = program.transitions.first().passes;
+        QCOMPARE(levels, QVector<double>({.733, .467, .2}));
+        QImage image(900, 650, QImage::Format_ARGB32);
+        QPainter painter(&image);
+        const auto view = pf::ui::drawSetup(painter, image.rect(), g.project->parameters, program.setup, "depthOutside");
+        QCOMPARE(view.cuttingPasses.size(), levels.size());
+        for (qsizetype i = 0; i < levels.size(); ++i)
+            QCOMPARE(view.cuttingPasses[i].x1(), view.map(levels[i], 0).x());
+    }
     void workOriginCrosshairs()
     {
         for (const auto& theme : {QString("light"), QString("dark")})
@@ -2313,6 +2364,10 @@ class UiTests final : public QObject
     {
         const auto generated = pf::generate(pf::Parameters());
         QVERIFY(generated.ok());
+        const auto& job = *generated.project;
+        const QRectF narrowPanel(0, 0, 150, 650);
+        const auto fitted = pf::ui::fitSetup(narrowPanel, job.parameters, job.programs[0].setup, false, true);
+        QVERIFY(fitted.scale * job.calculations.targetLength > narrowPanel.width() / 3);
         for (const auto size : {QSize(360, 350), QSize(900, 650), QSize(700, 1000)})
             for (const auto& program : generated.project->programs)
             {
@@ -2355,16 +2410,25 @@ class UiTests final : public QObject
         auto sections = w.process->sections;
         auto parameters = w.findChild<QStackedWidget*>("processParameters");
         QVERIFY(parameters);
-        const auto sectionWidth = sections->width(), parameterWidth = parameters->width();
-        QVERIFY(sectionWidth < 150 && parameterWidth < 350);
-        QVERIFY(w.process->diagram->width() > w.process->width() * .45);
+        const auto checkPanels = [&]
+        {
+            const auto drawing = w.process->diagram;
+            QVERIFY(sections->width() <= 128 && parameters->width() <= 320);
+            QVERIFY(drawing->mapTo(w.process, QPoint()).x() > parameters->geometry().right());
+            QVERIFY(w.process->rect().contains(drawing->mapTo(w.process, drawing->rect().bottomRight())));
+            QVERIFY(!drawing->visibleRegion().isEmpty());
+        };
+        checkPanels();
         const auto normalHeight = w.process->diagram->height();
-        const auto top = w.process->diagram->mapTo(w.process, QPoint()).y();
+        auto sequence = w.process->findChild<QLabel*>("setupSequence");
+        QVERIFY(sequence);
+        const auto drawingGap = [&] { return w.process->diagram->geometry().top() - sequence->geometry().bottom(); };
+        const int normalGap = drawingGap();
+        QVERIFY(normalGap > 0);
         w.showMaximized();
         QApplication::processEvents();
-        QCOMPARE(sections->width(), sectionWidth);
-        QCOMPARE(parameters->width(), parameterWidth);
-        QCOMPARE(w.process->diagram->mapTo(w.process, QPoint()).y(), top);
+        checkPanels();
+        QCOMPARE(drawingGap(), normalGap);
         QVERIFY(w.process->diagram->height() >= normalHeight);
         screenshot(w, "compact-technology-top");
         pf::ui::PartCanvas canvas;

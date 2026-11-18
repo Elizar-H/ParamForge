@@ -14,7 +14,7 @@
 namespace pf::ui
 {
 SetupMapping fitSetup(const QRectF& bounds, const Parameters& parameters, const Setup& setup, bool positiveOnly,
-                      bool keepPartOrientation)
+                      bool keepPartOrientation, const SetupMapping* previous)
 {
     const auto c = calculate(parameters);
     const auto radius = std::max(parameters.n("stockDiameter"), parameters.n("flangeDiameter")) / 2;
@@ -31,12 +31,20 @@ SetupMapping fitSetup(const QRectF& bounds, const Parameters& parameters, const 
         m.zDirection = -1;
         m.zOffset = -c.targetLength;
     }
-    m.scale = std::max(.1, std::min((bounds.width() - (positiveOnly ? 90 : 170)) / (right - left),
+    const double marginScale = std::clamp(bounds.width() / 500, 0., 1.);
+    const auto plot = bounds.adjusted((positiveOnly ? 45 : 60) * marginScale, 0,
+                                      -(positiveOnly ? 45 : 110) * marginScale, 0);
+    m.scale = std::max(.1, std::min(plot.width() / (right - left),
                                     (bounds.height() - (positiveOnly ? 70 : SetupTopMargin + SetupBottomMargin)) /
                                         (positiveOnly ? radius + 25 : 2 * radius + 30)));
-    m.origin = {positiveOnly ? bounds.left() + 45 - left * m.scale
-                             : bounds.center().x() - 25 - (left + right) / 2 * m.scale,
-                positiveOnly ? bounds.bottom() - 35 : bounds.top() + SetupTopMargin + (radius + 15) * m.scale};
+    double axisY = positiveOnly ? bounds.bottom() - 35 : bounds.top() + SetupTopMargin + (radius + 15) * m.scale;
+    if (previous && !positiveOnly)
+    {
+        axisY = previous->origin.y();
+        const double room = std::min(axisY - bounds.top() - SetupTopMargin, bounds.bottom() - SetupBottomMargin - axisY);
+        m.scale = std::max(.1, std::min({m.scale, previous->scale, room / (radius + 15)}));
+    }
+    m.origin = {positiveOnly ? plot.left() - left * m.scale : plot.center().x() - (left + right) / 2 * m.scale, axisY};
     return m;
 }
 SetupMapping drawSetup(QPainter& p, const QRectF& bounds, const Parameters& parameters, const Setup& setup,
@@ -46,7 +54,7 @@ SetupMapping drawSetup(QPainter& p, const QRectF& bounds, const Parameters& para
     const auto radius = std::max(parameters.n("stockDiameter"), parameters.n("flangeDiameter")) / 2;
     const auto left = setup.flipped ? -c.targetLength - 20 : -c.stockLength - 14;
     const auto right = setup.flipped ? parameters.n("trimAllowance") + 12 : parameters.n("frontFacingAllowance") + 12;
-    auto m = viewport.value_or(fitSetup(bounds, parameters, setup, positiveOnly));
+    auto m = viewport ? *viewport : fitSetup(bounds, parameters, setup, positiveOnly);
     const auto map = [&](double z, double r) { return m.map(z, r); };
     const bool depthView = highlight == "depthOutside" || highlight == "depthInside";
     const bool inside = highlight == "depthInside";
@@ -60,8 +68,11 @@ SetupMapping drawSetup(QPainter& p, const QRectF& bounds, const Parameters& para
     if (depthView)
         try
         {
-            for (const auto value : passes(2 * passStart, 2 * passFinish, parameters.n(highlight)))
-                levels.append(setup.flipped ? roundTo(value / 2) : value / 2);
+            if (setup.flipped)
+                levels = passes(passStart, passFinish, parameters.n(highlight), PassAxis::Z);
+            else
+                for (const auto diameter : passes(2 * passStart, 2 * passFinish, parameters.n(highlight)))
+                    levels.append(diameter / 2);
         }
         catch (const std::exception&)
         {
@@ -220,11 +231,13 @@ SetupMapping drawSetup(QPainter& p, const QRectF& bounds, const Parameters& para
     }
     drawCenterLine(p, map(left, 0), map(right, 0), m.scale);
     p.setPen(muted());
-    auto jawCaption =
-        QRectF(map(setup.jawsFrontZ - setup.gripLength / 2, radius + 19) - QPointF(100, 28), QSizeF(200, 24));
+    const QString jawText = QStringLiteral("Кулачки патрона");
+    const auto jawTextWidth = p.fontMetrics().horizontalAdvance(jawText) + 4;
+    auto jawCaption = QRectF(map(setup.jawsFrontZ - setup.gripLength / 2, radius + 19) - QPointF(jawTextWidth / 2., 28),
+                             QSizeF(jawTextWidth, 24));
     jawCaption.moveLeft(
         std::clamp(jawCaption.left(), bounds.left(), std::max(bounds.left(), bounds.right() - jawCaption.width())));
-    p.drawText(jawCaption, Qt::AlignCenter, "Кулачки патрона");
+    p.drawText(jawCaption, Qt::AlignCenter, jawText);
     drawWorkOrigin(p, map(0, 0));
     const auto label = [&](QPointF a, QPointF b, const QString& text, bool centered = false)
     {
@@ -418,9 +431,9 @@ SetupMapping drawSetup(QPainter& p, const QRectF& bounds, const Parameters& para
                                                 : "v = " + localized(parameters.n(highlight)) + " м/мин";
         p.setPen(ink());
         const auto textWidth = p.fontMetrics().horizontalAdvance(text) + 12;
-        p.drawText(QRectF(std::clamp(center.x() - textWidth / 2, bounds.left(), bounds.right() - textWidth),
-                          center.y() - 50, textWidth, 24),
-                   Qt::AlignCenter, text);
+        const double textLeft =
+            std::clamp(center.x() - textWidth / 2, bounds.left(), std::max(bounds.left(), bounds.right() - textWidth));
+        p.drawText(QRectF(textLeft, center.y() - 50, textWidth, 24), Qt::AlignCenter, text);
     }
     else if (!positiveOnly)
         axialDimension(setup.flipped ? -c.targetLength : -c.stockLength,

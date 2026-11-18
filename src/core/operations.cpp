@@ -25,6 +25,11 @@ QString inspectionDescription(const Parameters& p, const Calculations& c)
     }
     return "Проверить: " + text.join("; ") + ".";
 }
+QString firstSetupClampingText(const Calculations& c)
+{
+    // Operation 010 starts after facing. Its prepared front face is at Z0.
+    return "Вылет после подрезки " + localized(-c.jawsFrontZ) + " мм. Кулачки Z" + localized(c.jawsFrontZ) + " мм.";
+}
 QVector<Operation> operations(const Parameters& p, const Calculations& c)
 {
     return {{"005", "Подготовка заготовки", "manual",
@@ -34,9 +39,8 @@ QVector<Operation> operations(const Parameters& p, const Calculations& c)
                  " мм. Подготовленный торец принять исходным. Способ получения сквозного отверстия — вне данного "
                  "процесса."},
             {"010", "Токарная с ЧПУ — первый установ", "nc",
-             "Закрепить за наружную поверхность заготовки с вылетом " + localized(c.stockOverhang) +
-                 " мм. Участок внутри патрона " + localized(c.gripLength) + " мм. Передняя плоскость кулачков Z=" +
-                 localized(c.jawsFrontZ) + " мм, осевой зазор " + localized(c.chuckClearance) +
+             "Закрепить за наружную поверхность заготовки. " + firstSetupClampingText(c) +
+                 " Участок внутри патрона " + localized(c.gripLength) + " мм. Осевой зазор " + localized(c.chuckClearance) +
                  " мм. G54: Z0 — подготовленный передний торец, X0 — ось вращения; X задаётся по диаметру. Обработать "
                  "буртик, тело, сквозное отверстие и внутреннюю ступень. Длина до отделения " +
                  localized(c.cutLength) + " мм, задний припуск " + localized(p.n("trimAllowance")) +

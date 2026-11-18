@@ -191,12 +191,13 @@ QJsonObject Calculations::json() const
 }
 double Transition::actualMaximumDepth() const
 {
-    double maximum = 0, previous = startDiameter;
+    const bool facing = kind == "face";
+    double maximum = 0, previous = facing ? zStart : startDiameter;
     for (auto current : passes)
     {
-        maximum = std::max(maximum, std::abs(current - previous) / 2);
+        maximum = std::max(maximum, std::abs(current - previous));
         previous = current;
     }
-    return roundTo(maximum, 4);
+    return roundTo(facing ? maximum : maximum / 2, 4);
 }
 } // namespace pf

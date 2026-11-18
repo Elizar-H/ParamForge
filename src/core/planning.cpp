@@ -6,13 +6,14 @@
 
 namespace pf
 {
-QVector<double> passes(double start, double finish, double depth)
+QVector<double> passes(double start, double finish, double depth, PassAxis axis)
 {
+    constexpr double coordinateLimit = 10000;
     if (!std::isfinite(start) || !std::isfinite(finish) || !std::isfinite(depth) || depth <= 0 ||
-        std::abs(start) > 10000 || std::abs(finish) > 10000)
+        std::abs(start) > coordinateLimit || std::abs(finish) > coordinateLimit)
         throw std::invalid_argument("Некорректные параметры проходов.");
-    const auto a = std::llround(start * 10000), b = std::llround(finish * 10000),
-               step = 2 * std::llround(depth * 10000);
+    const auto a = dimensionTicks(start), b = dimensionTicks(finish);
+    const auto step = (axis == PassAxis::Diameter ? 2 : 1) * dimensionTicks(std::min(depth, 2 * coordinateLimit));
     if (step <= 0)
         throw std::invalid_argument("Глубина прохода слишком мала.");
     const auto count = (std::abs(b - a) + step - 1) / step;
@@ -79,6 +80,15 @@ class Builder
     }
 };
 } // namespace
+Setup firstSetupFixture(const Parameters& p, const Calculations& c)
+{
+    return {"010", "Первый установ", false, 0, c.jawsFrontZ, c.gripLength, p.n("stockDiameter"), -c.stockLength};
+}
+Setup secondSetupFixture(const Parameters& p, const Calculations& c)
+{
+    return {"020", "Второй установ", true, p.n("trimAllowance"), roundTo(-c.targetLength + c.secondClampEnd),
+            25, c.targetBodyDiameter, -c.targetLength};
+}
 Plan firstSetup(const Parameters& p, const Calculations& c, const QString& id)
 {
     struct Definition
@@ -113,8 +123,7 @@ Plan firstSetup(const Parameters& p, const Calculations& c, const QString& id)
          allowance, c.targetCounterboreDiameter, true}};
     Builder b;
     b.plan.id = id;
-    b.plan.setup = {"010",        "Первый установ",     false,         0, c.jawsFrontZ,
-                    c.gripLength, p.n("stockDiameter"), -c.stockLength};
+    b.plan.setup = firstSetupFixture(p, c);
     if (p.b("simulationBlank"))
         b.plan.blank = Plan::Blank{0, -c.stockLength, c.jawsFrontZ, p.n("stockDiameter"), p.n("stockBore")};
     b.prepare();
@@ -201,9 +210,7 @@ Plan secondSetup(const Parameters& p, const Calculations& c, const QString& id)
 {
     Builder b;
     b.plan.id = id;
-    b.plan.setup = {
-        "020", "Второй установ",     true,           p.n("trimAllowance"), roundTo(-c.targetLength + c.secondClampEnd),
-        25,    c.targetBodyDiameter, -c.targetLength};
+    b.plan.setup = secondSetupFixture(p, c);
     const auto safeX = roundTo(c.targetBodyDiameter + 2 * p.n("clearanceX"));
     const auto insideX = roundTo(c.targetBoreDiameter - 2 * p.n("clearanceX"));
     const auto safeZ = roundTo(p.n("trimAllowance") + p.n("clearanceZ"));
@@ -213,13 +220,10 @@ Plan secondSetup(const Parameters& p, const Calculations& c, const QString& id)
     b.emit(InstructionKind::ApproachFront, 0, safeZ);
     b.emit(InstructionKind::CoolantOn);
     const auto allowance = p.n("finishAllowance");
-    const auto trimTicks = dimensionTicks(p.n("trimAllowance")), finishTicks = dimensionTicks(allowance);
-    const auto depthTicks = dimensionTicks(p.n("depthOutside"));
-    const int roughCount =
-        static_cast<int>((std::max<qint64>(0, trimTicks - finishTicks) + depthTicks - 1) / depthTicks);
+    const auto roughPasses = passes(p.n("trimAllowance"), allowance, p.n("depthOutside"), PassAxis::Z);
     for (int stage = 0; stage < 2; ++stage)
     {
-        if (stage == 0 && roughCount == 0)
+        if (stage == 0 && roughPasses.isEmpty())
             continue;
         Transition t;
         t.id = stage == 0 ? "020.01" : "020.02";
@@ -235,15 +239,7 @@ Plan secondSetup(const Parameters& p, const Calculations& c, const QString& id)
         t.referenceDiameter = c.targetBodyDiameter;
         t.zStart = stage == 0 ? p.n("trimAllowance") : allowance;
         t.zEnd = stage == 0 ? allowance : 0;
-        if (stage == 0)
-            for (int i = 1; i <= roughCount; ++i)
-            {
-                const auto numerator = trimTicks * roughCount - (trimTicks - finishTicks) * i;
-                const auto denominator = roughCount * 10;
-                t.passes.append(static_cast<double>((numerator + denominator / 2) / denominator) / 1000.);
-            }
-        else
-            t.passes.append(0);
+        t.passes = stage == 0 ? roughPasses : QVector<double>{0};
         b.emit(InstructionKind::Comment, 0, 0, "TR " + t.id + (stage == 0 ? " BACK FACE ROUGH" : " BACK FACE FINISH"));
         b.emit(InstructionKind::Speed, 0, t.rpm);
         b.emit(InstructionKind::FeedPerRevolution);

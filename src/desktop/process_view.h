@@ -5,7 +5,6 @@
 #include <QCheckBox>
 #include <QListWidget>
 #include <QMap>
-#include <QPainter>
 #include <QStackedWidget>
 #include <algorithm>
 
